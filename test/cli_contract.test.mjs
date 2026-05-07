@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -31,6 +32,22 @@ test("o2 -v prints package version only", () => {
   assert.equal(result.stdout, `${packageJson.version}\n`);
   assert.equal(result.stderr, "");
 });
+
+test("installed symlink launcher resolves the app root", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "o2-launcher-"));
+  const linkedLauncher = path.join(tempDir, "o2");
+  fs.symlinkSync(path.join(appRoot, "o2"), linkedLauncher);
+
+  const result = spawnSync(linkedLauncher, ["-v"], {
+    cwd: tempDir,
+    encoding: "utf8"
+  });
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, `${packageJson.version}\n`);
+  assert.equal(result.stderr, "");
+});
+
 
 test("o2 rejects multiple paths", () => {
   const result = runCli(["one", "two"]);
