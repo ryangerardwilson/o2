@@ -392,6 +392,7 @@ export default function App() {
   const [markedPaths, setMarkedPaths] = useState(() => new Set());
   const [visualMode, setVisualMode] = useState(false);
   const [visualAnchorIndex, setVisualAnchorIndex] = useState(0);
+  const [visualBasePaths, setVisualBasePaths] = useState(() => new Set());
   const [fileClipboard, setFileClipboard] = useState(null);
   const [pendingD, setPendingD] = useState(false);
   const [extractingZip, setExtractingZip] = useState(null);
@@ -429,6 +430,7 @@ export default function App() {
     setMarkedPaths(new Set());
     setVisualMode(false);
     setVisualAnchorIndex(0);
+    setVisualBasePaths(new Set());
     setPendingD(false);
   }, [currentDir]);
 
@@ -535,8 +537,10 @@ export default function App() {
     }
     const start = Math.min(anchorIndex, cursorIndex);
     const end = Math.max(anchorIndex, cursorIndex);
-    setMarkedPaths(new Set(visibleEntries.slice(start, end + 1).map((entry) => entry.path)));
-  }, [visibleEntries]);
+    const next = new Set(visualBasePaths);
+    visibleEntries.slice(start, end + 1).forEach((entry) => next.add(entry.path));
+    setMarkedPaths(next);
+  }, [visualBasePaths, visibleEntries]);
 
   const moveSelection = useCallback((delta) => {
     setSelectedIndex((index) => {
@@ -634,6 +638,7 @@ export default function App() {
     setMarkedPaths(new Set());
     setVisualMode(false);
     setVisualAnchorIndex(0);
+    setVisualBasePaths(new Set());
     setPendingD(false);
   }, []);
 
@@ -652,6 +657,7 @@ export default function App() {
     }
     setVisualMode(false);
     setVisualAnchorIndex(selectedIndex);
+    setVisualBasePaths(new Set());
     setPendingD(false);
     setMarkedPaths((paths) => {
       const next = new Set(paths);
@@ -677,12 +683,14 @@ export default function App() {
         setStatus(`${markedPaths.size} marked`);
         return false;
       }
+      const base = new Set(markedPaths);
+      setVisualBasePaths(base);
       setVisualAnchorIndex(selectedIndex);
-      setMarkedPaths(new Set([selectedEntry.path]));
+      setMarkedPaths(new Set([...base, selectedEntry.path]));
       setStatus("visual");
       return true;
     });
-  }, [markedPaths.size, selectedEntry, selectedIndex]);
+  }, [markedPaths, markedPaths.size, selectedEntry, selectedIndex]);
 
   const queueClipboard = useCallback((mode) => {
     const items = selectedActionItems();

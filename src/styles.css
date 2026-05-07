@@ -182,15 +182,16 @@ button {
 
 .file-row.marked {
   color: var(--ink);
-  background: rgba(160, 255, 190, 0.075);
+  background: rgba(160, 255, 190, 0.11);
+  box-shadow: inset 2px 0 0 rgba(160, 255, 190, 0.58);
 }
 
 .file-row.selected.marked {
-  background: rgba(160, 255, 190, 0.13);
+  background: rgba(160, 255, 190, 0.17);
 }
 
 .file-row.visual.marked {
-  box-shadow: inset 2px 0 0 rgba(160, 255, 190, 0.62);
+  box-shadow: inset 3px 0 0 rgba(160, 255, 190, 0.82);
 }
 
 .file-cursor,
