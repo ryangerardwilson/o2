@@ -13,8 +13,8 @@ const HELP_GROUPS = [
     title: "navigation",
     items: [
       ["j / k", "move down / up"],
-      ["h / l", "parent / enter, preview, unzip"],
-      ["enter / ctrl+m", "enter, preview, unzip"],
+      ["h / l", "parent / enter, preview, unzip+enter"],
+      ["enter / ctrl+m", "enter, preview, unzip+enter"],
       ["ctrl+j / ctrl+k", "scroll preview"],
       ["ctrl+h / ctrl+l", "pan preview"]
     ]
@@ -758,15 +758,16 @@ export default function App() {
     setStatus(`unzipping ${entry.name}`);
     try {
       const result = await window.o2.extractZip(entry.path);
-      setFocusPath(result.path || "");
+      if (result.path) {
+        navigateTo(result.path);
+      }
       setStatus(`unzipped ${entry.name}`);
-      setRefreshTick((value) => value + 1);
     } catch (error) {
       setStatus(error.message || "unzip failed");
     } finally {
       setExtractingZip(null);
     }
-  }, []);
+  }, [navigateTo]);
 
   const openEntry = useCallback(
     async (entry = selectedEntry, mode = "preview") => {

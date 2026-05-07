@@ -36,8 +36,8 @@ repo ignores them.
 
 - `j` / `k`: move down or up
 - `h`: parent directory
-- `l`: enter the focused directory, preview the focused file, or unzip `.zip`
-- `Enter` / `Ctrl+M`: enter the focused directory, preview the focused file, or unzip `.zip`
+- `l`: enter a directory, preview a file, or unzip `.zip` and enter the extracted directory
+- `Enter` / `Ctrl+M`: enter, preview, or unzip `.zip` and enter the extracted directory
 - `Ctrl+J` / `Ctrl+K`: scroll the preview pane
 - `Ctrl+H` / `Ctrl+L`: move left and right across the preview pane
 - `-` / `=`: zoom the preview pane out or in
