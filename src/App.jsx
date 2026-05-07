@@ -12,7 +12,7 @@ const HELP_GROUPS = [
       ["j / k", "move down / up"],
       ["h / l", "parent / enter"],
       ["enter", "enter or edit"],
-      ["ctrl+j / ctrl+k", "jump rows"],
+      ["ctrl+j / ctrl+k", "scroll preview"],
       ["ctrl+h / ctrl+l", "history"]
     ]
   },
@@ -178,6 +178,15 @@ function HelpOverlay({ onClose }) {
 }
 
 function FileList({ entries, selectedIndex, onSelect }) {
+  const selectedRef = useRef(null);
+
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest"
+    });
+  }, [selectedIndex, entries]);
+
   return (
     <div className="file-list">
       {entries.length === 0 ? (
@@ -186,6 +195,7 @@ function FileList({ entries, selectedIndex, onSelect }) {
         entries.map((entry, index) => (
           <button
             type="button"
+            ref={index === selectedIndex ? selectedRef : null}
             key={entry.path}
             className={`file-row ${index === selectedIndex ? "selected" : ""}`}
             onMouseEnter={() => onSelect(index)}
@@ -202,12 +212,49 @@ function FileList({ entries, selectedIndex, onSelect }) {
   );
 }
 
-function PreviewPane({ entry, preview }) {
+function PreviewPane({ entry, preview, scrollRef }) {
+  const content = (() => {
+    if (!entry) {
+      return (
+        <div className="preview-heading">
+          <strong>no selection</strong>
+        </div>
+      );
+    }
+
+    if (preview?.type === "text") {
+      return <pre className="text-preview">{preview.text}</pre>;
+    }
+    if (preview?.type === "pdf" && preview.dataUrl) {
+      return <iframe className="pdf-preview" src={preview.dataUrl} title={entry.name} />;
+    }
+    if (preview?.type === "pdf" && preview.tooLarge) {
+      return <div className="preview-note">PDF too large to preview</div>;
+    }
+    if (preview?.type === "image" && preview.dataUrl) {
+      return (
+        <div className="image-preview">
+          <img src={preview.dataUrl} alt={entry.name} />
+        </div>
+      );
+    }
+    if (preview?.type === "image" && preview.tooLarge) {
+      return <div className="preview-note">image too large to preview</div>;
+    }
+    if (preview?.type === "directory") {
+      return <div className="preview-note">{preview.count} entries</div>;
+    }
+    if (preview?.type === "binary") {
+      return <div className="preview-note">binary file</div>;
+    }
+    return <div className="preview-note">preview unavailable</div>;
+  })();
+
   if (!entry) {
     return (
       <aside className="preview-pane">
-        <div className="preview-heading">
-          <strong>no selection</strong>
+        <div className="preview-scroll" ref={scrollRef}>
+          {content}
         </div>
       </aside>
     );
@@ -224,25 +271,9 @@ function PreviewPane({ entry, preview }) {
         <span>{entry.isDirectory ? "dir" : formatBytes(entry.size)}</span>
         <span>{formatTime(entry.mtimeMs)}</span>
       </div>
-      {preview?.type === "text" ? (
-        <pre className="text-preview">{preview.text}</pre>
-      ) : preview?.type === "pdf" && preview.dataUrl ? (
-        <iframe className="pdf-preview" src={preview.dataUrl} title={entry.name} />
-      ) : preview?.type === "pdf" && preview.tooLarge ? (
-        <div className="preview-note">PDF too large to preview</div>
-      ) : preview?.type === "image" && preview.dataUrl ? (
-        <div className="image-preview">
-          <img src={preview.dataUrl} alt={entry.name} />
-        </div>
-      ) : preview?.type === "image" && preview.tooLarge ? (
-        <div className="preview-note">image too large to preview</div>
-      ) : preview?.type === "directory" ? (
-        <div className="preview-note">{preview.count} entries</div>
-      ) : preview?.type === "binary" ? (
-        <div className="preview-note">binary file</div>
-      ) : (
-        <div className="preview-note">preview unavailable</div>
-      )}
+      <div className="preview-scroll" ref={scrollRef}>
+        {content}
+      </div>
     </aside>
   );
 }
@@ -267,6 +298,7 @@ export default function App() {
   const [pathHistory, setPathHistory] = useState([START_DIR]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const selectedPathRef = useRef(focusPath);
+  const previewScrollRef = useRef(null);
 
   const selectedEntry = entries[selectedIndex] || null;
 
@@ -336,6 +368,12 @@ export default function App() {
     };
   }, [selectedEntry]);
 
+  useEffect(() => {
+    if (previewScrollRef.current) {
+      previewScrollRef.current.scrollTop = 0;
+    }
+  }, [selectedEntry, preview]);
+
   const navigateTo = useCallback(
     (directory, options = {}) => {
       const record = options.record !== false;
@@ -361,10 +399,18 @@ export default function App() {
     setSelectedIndex((index) => wrapIndex(index + delta, entries.length));
   }, [entries.length]);
 
-  const jumpSelection = useCallback((direction) => {
-    const jump = Math.max(1, Math.floor(entries.length / 10));
-    setSelectedIndex((index) => clampIndex(index + direction * jump, entries.length));
-  }, [entries.length]);
+  const scrollPreview = useCallback((direction) => {
+    const node = previewScrollRef.current;
+    if (!node) {
+      return;
+    }
+    const amount = Math.max(80, Math.floor(node.clientHeight * 0.52));
+    node.scrollBy({
+      top: direction * amount,
+      left: 0,
+      behavior: "auto"
+    });
+  }, []);
 
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
@@ -629,12 +675,12 @@ export default function App() {
         }
         if (key === "j") {
           event.preventDefault();
-          jumpSelection(1);
+          scrollPreview(1);
           return;
         }
         if (key === "k") {
           event.preventDefault();
-          jumpSelection(-1);
+          scrollPreview(-1);
           return;
         }
       }
@@ -668,7 +714,6 @@ export default function App() {
     filterMode,
     goHistory,
     goParent,
-    jumpSelection,
     leader,
     moveSelection,
     navigateTo,
@@ -676,6 +721,7 @@ export default function App() {
     prompt,
     refresh,
     runLeaderCommand,
+    scrollPreview,
     selectedEntry,
     showHelp
   ]);
@@ -708,7 +754,7 @@ export default function App() {
 
       <section className="workspace">
         <FileList entries={entries} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
-        <PreviewPane entry={selectedEntry} preview={preview} />
+        <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} />
         {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} /> : null}
         {prompt ? (
           <Prompt

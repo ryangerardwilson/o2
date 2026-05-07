@@ -38,7 +38,7 @@ repo ignores them.
 - `h`: parent directory
 - `l`: enter the focused directory or open the focused file in Vim
 - `Enter`: enter the focused directory or open the focused file in Vim
-- `Ctrl+J` / `Ctrl+K`: jump through the list
+- `Ctrl+J` / `Ctrl+K`: scroll the preview pane
 - `Ctrl+H` / `Ctrl+L`: back and forward through directory history
 - `/`: filter by name
 - `?`: shortcut overlay
