@@ -118,10 +118,14 @@ button {
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(280px, 0.52fr) minmax(280px, 0.48fr);
+  grid-template-columns: minmax(280px, 1fr);
   min-height: 0;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.workspace.preview-open {
+  grid-template-columns: minmax(280px, 0.52fr) minmax(280px, 0.48fr);
 }
 
 .file-list,
@@ -444,7 +448,7 @@ button {
 }
 
 @media (max-width: 820px) {
-  .workspace {
+  .workspace.preview-open {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(190px, 0.5fr) minmax(180px, 0.5fr);
   }

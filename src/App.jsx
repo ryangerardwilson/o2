@@ -10,8 +10,8 @@ const HELP_GROUPS = [
     title: "navigation",
     items: [
       ["j / k", "move down / up"],
-      ["h / l", "parent / enter"],
-      ["enter", "enter or edit"],
+      ["h / l", "parent / enter or preview"],
+      ["enter", "enter or preview"],
       ["ctrl+j / ctrl+k", "scroll preview"],
       ["ctrl+h / ctrl+l", "history"]
     ]
@@ -31,6 +31,7 @@ const HELP_GROUPS = [
     title: "view",
     items: [
       ["/", "filter"],
+      ["p", "toggle preview"],
       [",dot", "dotfiles"],
       [",sa", "sort name"],
       [",sma / ,smd", "sort modified"],
@@ -293,6 +294,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [prompt, setPrompt] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [pathHistory, setPathHistory] = useState([START_DIR]);
@@ -347,7 +349,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!selectedEntry) {
+    if (!previewVisible || !selectedEntry) {
       setPreview(null);
       return undefined;
     }
@@ -366,7 +368,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedEntry]);
+  }, [previewVisible, selectedEntry]);
 
   useEffect(() => {
     if (previewScrollRef.current) {
@@ -400,6 +402,10 @@ export default function App() {
   }, [entries.length]);
 
   const scrollPreview = useCallback((direction) => {
+    if (!previewVisible) {
+      setStatus("preview hidden");
+      return;
+    }
     const node = previewScrollRef.current;
     if (!node) {
       return;
@@ -410,7 +416,7 @@ export default function App() {
       left: 0,
       behavior: "auto"
     });
-  }, []);
+  }, [previewVisible]);
 
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
@@ -422,7 +428,7 @@ export default function App() {
   }, [currentDir, navigateTo]);
 
   const openEntry = useCallback(
-    async (entry = selectedEntry, mode = "editor") => {
+    async (entry = selectedEntry, mode = "preview") => {
       if (!entry) {
         return;
       }
@@ -434,9 +440,12 @@ export default function App() {
         if (mode === "external") {
           await window.o2.openExternal(entry.path);
           setStatus(`opened ${entry.name}`);
-        } else {
+        } else if (mode === "editor") {
           const result = await window.o2.openInEditor(entry.path);
           setStatus(`editing ${entry.name}${result?.terminal ? ` in ${result.terminal}` : ""}`);
+        } else {
+          setPreviewVisible(true);
+          setStatus(`previewing ${entry.name}`);
         }
       } catch (error) {
         setStatus(error.message || "open failed");
@@ -649,6 +658,16 @@ export default function App() {
         return;
       }
 
+      if (isPlainKey(event, "p")) {
+        event.preventDefault();
+        setPreviewVisible((visible) => {
+          const next = !visible;
+          setStatus(next ? "preview shown" : "preview hidden");
+          return next;
+        });
+        return;
+      }
+
       if (isPlainKey(event, "e")) {
         event.preventDefault();
         openEntry(selectedEntry, "editor");
@@ -729,6 +748,7 @@ export default function App() {
   const statusLine = useMemo(() => {
     const parts = [
       `${entries.length ? selectedIndex + 1 : 0}/${entries.length}`,
+      previewVisible ? "preview" : "",
       filter ? `/${filter}` : "",
       leader !== null ? `,${leader}` : "",
       showHidden ? ".dot" : "",
@@ -737,7 +757,7 @@ export default function App() {
       status
     ].filter(Boolean);
     return parts.join("  ");
-  }, [entries.length, filter, leader, loading, selectedIndex, showHidden, sortMode, status]);
+  }, [entries.length, filter, leader, loading, previewVisible, selectedIndex, showHidden, sortMode, status]);
 
   return (
     <main className="app-shell" tabIndex={-1}>
@@ -752,9 +772,11 @@ export default function App() {
         <div className="mode-label">hjkl</div>
       </header>
 
-      <section className="workspace">
+      <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>
         <FileList entries={entries} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
-        <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} />
+        {previewVisible ? (
+          <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} />
+        ) : null}
         {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} /> : null}
         {prompt ? (
           <Prompt

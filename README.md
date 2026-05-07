@@ -36,10 +36,11 @@ repo ignores them.
 
 - `j` / `k`: move down or up
 - `h`: parent directory
-- `l`: enter the focused directory or open the focused file in Vim
-- `Enter`: enter the focused directory or open the focused file in Vim
+- `l`: enter the focused directory or preview the focused file
+- `Enter`: enter the focused directory or preview the focused file
 - `Ctrl+J` / `Ctrl+K`: scroll the preview pane
 - `Ctrl+H` / `Ctrl+L`: back and forward through directory history
+- `p`: toggle the preview pane
 - `/`: filter by name
 - `?`: shortcut overlay
 - `,dot`: toggle dotfiles
@@ -53,7 +54,8 @@ repo ignores them.
 
 To choose a terminal or editor explicitly:
 
-The preview pane supports text files, common image formats, and PDFs.
+The preview pane is hidden by default. Press `p` to toggle it, or press `l` on
+a file to show it. It supports text files, common image formats, and PDFs.
 
 ```bash
 O2_TERMINAL=alacritty O2_EDITOR=nvim o2
