@@ -403,16 +403,27 @@ export default function App() {
   const previewScrollRef = useRef(null);
   const helpScrollRef = useRef(null);
 
-  const selectedEntry = entries[selectedIndex] || null;
+  const cutPathSet = useMemo(() => (
+    new Set(fileClipboard?.mode === "move" ? fileClipboard.items.map((item) => item.path) : [])
+  ), [fileClipboard]);
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => !cutPathSet.has(entry.path)),
+    [cutPathSet, entries]
+  );
+  const selectedEntry = visibleEntries[selectedIndex] || null;
   const markedEntries = useMemo(
-    () => entries.filter((entry) => markedPaths.has(entry.path)),
-    [entries, markedPaths]
+    () => visibleEntries.filter((entry) => markedPaths.has(entry.path)),
+    [markedPaths, visibleEntries]
   );
   const actionEntries = markedEntries.length > 0 ? markedEntries : selectedEntry ? [selectedEntry] : [];
 
   useEffect(() => {
     selectedPathRef.current = selectedEntry?.path || selectedPathRef.current || focusPath;
   }, [selectedEntry, focusPath]);
+
+  useEffect(() => {
+    setSelectedIndex((index) => clampIndex(index, visibleEntries.length));
+  }, [visibleEntries.length]);
 
   useEffect(() => {
     setMarkedPaths(new Set());
@@ -438,10 +449,13 @@ export default function App() {
         }
         setCurrentDir(result.path);
         setEntries(result.entries);
+        const visibleResultEntries = result.entries.filter((entry) => !cutPathSet.has(entry.path));
         const focusIndex = requestedFocus
-          ? result.entries.findIndex((entry) => entry.path === requestedFocus)
+          ? visibleResultEntries.findIndex((entry) => entry.path === requestedFocus)
           : -1;
-        setSelectedIndex((current) => (focusIndex >= 0 ? focusIndex : clampIndex(current, result.entries.length)));
+        setSelectedIndex((current) => (
+          focusIndex >= 0 ? focusIndex : clampIndex(current, visibleResultEntries.length)
+        ));
         setLoading(false);
         if (focusPath) {
           setFocusPath("");
@@ -458,7 +472,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentDir, showHidden, filter, sortMode, refreshTick, focusPath]);
+  }, [currentDir, showHidden, filter, sortMode, refreshTick, focusPath, cutPathSet]);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,24 +529,24 @@ export default function App() {
   );
 
   const markVisualRange = useCallback((anchorIndex, cursorIndex) => {
-    if (!entries.length) {
+    if (!visibleEntries.length) {
       setMarkedPaths(new Set());
       return;
     }
     const start = Math.min(anchorIndex, cursorIndex);
     const end = Math.max(anchorIndex, cursorIndex);
-    setMarkedPaths(new Set(entries.slice(start, end + 1).map((entry) => entry.path)));
-  }, [entries]);
+    setMarkedPaths(new Set(visibleEntries.slice(start, end + 1).map((entry) => entry.path)));
+  }, [visibleEntries]);
 
   const moveSelection = useCallback((delta) => {
     setSelectedIndex((index) => {
-      const nextIndex = wrapIndex(index + delta, entries.length);
+      const nextIndex = wrapIndex(index + delta, visibleEntries.length);
       if (visualMode) {
         markVisualRange(visualAnchorIndex, nextIndex);
       }
       return nextIndex;
     });
-  }, [entries.length, markVisualRange, visualAnchorIndex, visualMode]);
+  }, [markVisualRange, visibleEntries.length, visualAnchorIndex, visualMode]);
 
   const changePreviewZoom = useCallback((direction) => {
     if (!previewVisible) {
@@ -712,7 +726,7 @@ export default function App() {
         mode: fileClipboard.mode
       });
       const changedCount = result.results?.filter((item) => !item.unchanged).length || 0;
-      if (fileClipboard.mode === "move" && changedCount > 0) {
+      if (fileClipboard.mode === "move") {
         setFileClipboard(null);
       }
       setFocusPath(result.path || "");
@@ -798,7 +812,7 @@ export default function App() {
   const runLeaderCommand = useCallback(
     (command) => {
       const actions = {
-        j: () => setSelectedIndex(Math.max(0, entries.length - 1)),
+        j: () => setSelectedIndex(Math.max(0, visibleEntries.length - 1)),
         k: () => setSelectedIndex(0),
         dot: () => {
           setShowHidden((value) => !value);
@@ -841,7 +855,7 @@ export default function App() {
       setStatus(`unknown ,${command}`);
       setLeader(null);
     },
-    [entries.length, selectedEntry, showHidden]
+    [selectedEntry, showHidden, visibleEntries.length]
   );
 
   const submitPrompt = useCallback(
@@ -1198,7 +1212,7 @@ export default function App() {
 
   const statusLine = useMemo(() => {
     const parts = [
-      `${entries.length ? selectedIndex + 1 : 0}/${entries.length}`,
+      `${visibleEntries.length ? selectedIndex + 1 : 0}/${visibleEntries.length}`,
       previewVisible ? "preview" : "",
       previewVisible && previewZoom !== 1 ? `${Math.round(previewZoom * 100)}%` : "",
       visualMode ? "visual" : "",
@@ -1217,7 +1231,6 @@ export default function App() {
     ].filter(Boolean);
     return parts.join("  ");
   }, [
-    entries.length,
     extractingZip,
     fileClipboard,
     filter,
@@ -1231,6 +1244,7 @@ export default function App() {
     showHidden,
     sortMode,
     status,
+    visibleEntries.length,
     visualMode
   ]);
 
@@ -1249,7 +1263,7 @@ export default function App() {
 
       <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>
         <FileList
-          entries={entries}
+          entries={visibleEntries}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
           markedPaths={markedPaths}
