@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const params = new URLSearchParams(window.location.search);
 const START_DIR = params.get("dir") || "/";
@@ -220,17 +220,31 @@ function HelpOverlay({ onClose, scrollRef }) {
 }
 
 function FileList({ entries, selectedIndex, onSelect, markedPaths, visualMode }) {
+  const listRef = useRef(null);
   const selectedRef = useRef(null);
 
-  useEffect(() => {
-    selectedRef.current?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest"
-    });
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const selected = selectedRef.current;
+    if (!list || !selected) {
+      return;
+    }
+
+    const padding = 6;
+    const listRect = list.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    const topDelta = selectedRect.top - listRect.top;
+    const bottomDelta = selectedRect.bottom - listRect.bottom;
+
+    if (topDelta < padding) {
+      list.scrollTop += topDelta - padding;
+    } else if (bottomDelta > -padding) {
+      list.scrollTop += bottomDelta + padding;
+    }
   }, [selectedIndex, entries]);
 
   return (
-    <div className="file-list">
+    <div className="file-list" ref={listRef}>
       {entries.length === 0 ? (
         <div className="empty-row">(empty)</div>
       ) : (
@@ -243,7 +257,7 @@ function FileList({ entries, selectedIndex, onSelect, markedPaths, visualMode })
               ref={selected ? selectedRef : null}
               key={entry.path}
               className={`file-row ${selected ? "selected" : ""} ${marked ? "marked" : ""} ${visualMode ? "visual" : ""}`}
-              onMouseEnter={() => onSelect(index)}
+              onPointerMove={() => onSelect(index)}
               onFocus={() => onSelect(index)}
             >
               <span className="file-cursor">{selected ? ">" : marked ? "*" : " "}</span>
