@@ -13,6 +13,7 @@ const HELP_GROUPS = [
     title: "navigation",
     items: [
       ["j / k", "move down / up"],
+      ["gg / G", "jump first / last"],
       ["h / l", "parent / enter, preview, unzip+enter"],
       ["enter / ctrl+m", "enter, preview, unzip+enter"],
       ["ctrl+j / ctrl+k", "scroll preview"],
@@ -64,6 +65,10 @@ function isPlainKey(event, value) {
 
 function isPrintable(event) {
   return !event.ctrlKey && !event.altKey && !event.metaKey && event.key?.length === 1;
+}
+
+function isShiftKey(event, value) {
+  return !event.ctrlKey && !event.altKey && !event.metaKey && event.shiftKey && keyName(event) === value;
 }
 
 function isEnter(event) {
@@ -402,6 +407,7 @@ export default function App() {
   const [visualBasePaths, setVisualBasePaths] = useState(() => new Set());
   const [fileClipboard, setFileClipboard] = useState(null);
   const [pendingD, setPendingD] = useState(false);
+  const [pendingG, setPendingG] = useState(false);
   const [extractingZip, setExtractingZip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -559,6 +565,14 @@ export default function App() {
     });
   }, [markVisualRange, visibleEntries.length, visualAnchorIndex, visualMode]);
 
+  const jumpSelection = useCallback((targetIndex) => {
+    const nextIndex = clampIndex(targetIndex, visibleEntries.length);
+    setSelectedIndex(nextIndex);
+    if (visualMode) {
+      markVisualRange(visualAnchorIndex, nextIndex);
+    }
+  }, [markVisualRange, visibleEntries.length, visualAnchorIndex, visualMode]);
+
   const changePreviewZoom = useCallback((direction) => {
     if (!previewVisible) {
       setStatus("preview hidden");
@@ -647,6 +661,7 @@ export default function App() {
     setVisualAnchorIndex(0);
     setVisualBasePaths(new Set());
     setPendingD(false);
+    setPendingG(false);
   }, []);
 
   const selectedActionItems = useCallback(() => (
@@ -943,9 +958,9 @@ export default function App() {
 
   useEffect(() => {
     window.o2?.setInputMode?.(
-      Boolean(prompt) || filterMode || leader !== null || showHelp || pendingD || Boolean(extractingZip)
+      Boolean(prompt) || filterMode || leader !== null || showHelp || pendingD || pendingG || Boolean(extractingZip)
     );
-  }, [extractingZip, filterMode, leader, pendingD, prompt, showHelp]);
+  }, [extractingZip, filterMode, leader, pendingD, pendingG, prompt, showHelp]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1031,6 +1046,23 @@ export default function App() {
           return;
         }
         setPendingD(false);
+      }
+
+      if (pendingG) {
+        if (isEscape(event)) {
+          event.preventDefault();
+          setPendingG(false);
+          setStatus("jump canceled");
+          return;
+        }
+        if (isPlainKey(event, "g") && !event.shiftKey) {
+          event.preventDefault();
+          setPendingG(false);
+          jumpSelection(0);
+          setStatus("top");
+          return;
+        }
+        setPendingG(false);
       }
 
       if (event.ctrlKey && !event.altKey && !event.metaKey && keyName(event) === "c") {
@@ -1119,7 +1151,24 @@ export default function App() {
       if (isPlainKey(event, "d")) {
         event.preventDefault();
         setPendingD(true);
+        setPendingG(false);
         setStatus("d");
+        return;
+      }
+
+      if (isShiftKey(event, "g")) {
+        event.preventDefault();
+        setPendingG(false);
+        jumpSelection(visibleEntries.length - 1);
+        setStatus("bottom");
+        return;
+      }
+
+      if (isPlainKey(event, "g")) {
+        event.preventDefault();
+        setPendingG(true);
+        setPendingD(false);
+        setStatus("g");
         return;
       }
 
@@ -1208,6 +1257,7 @@ export default function App() {
     filterDraft,
     filterMode,
     goParent,
+    jumpSelection,
     leader,
     moveSelection,
     navigateTo,
@@ -1215,6 +1265,7 @@ export default function App() {
     panPreview,
     pasteClipboard,
     pendingD,
+    pendingG,
     prompt,
     queueClipboard,
     refresh,
@@ -1223,7 +1274,8 @@ export default function App() {
     selectedEntry,
     showHelp,
     toggleMark,
-    toggleVisualMode
+    toggleVisualMode,
+    visibleEntries.length
   ]);
 
   const statusLine = useMemo(() => {
@@ -1237,6 +1289,7 @@ export default function App() {
         ? `${fileClipboard.mode === "move" ? "cut" : "yank"} ${fileClipboard.items.length}`
         : "",
       pendingD ? "d" : "",
+      pendingG ? "g" : "",
       filter ? `/${filter}` : "",
       leader !== null ? `,${leader}` : "",
       showHidden ? ".dot" : "",
@@ -1254,6 +1307,7 @@ export default function App() {
     loading,
     markedPaths.size,
     pendingD,
+    pendingG,
     previewVisible,
     previewZoom,
     selectedIndex,
@@ -1267,14 +1321,10 @@ export default function App() {
   return (
     <main className="app-shell" tabIndex={-1}>
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">o2</span>
-        </div>
         <div className="path-heading">
           <strong>{currentDir}</strong>
           <span>{selectedEntry ? selectedEntry.prettyPath : "no selection"}</span>
         </div>
-        <div className="mode-label">hjkl</div>
       </header>
 
       <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>

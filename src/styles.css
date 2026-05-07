@@ -57,31 +57,12 @@ button {
 
 .topbar {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
   padding: 5px 10px;
   border-bottom: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.58);
   backdrop-filter: blur(18px) saturate(105%);
-}
-
-.brand {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.brand-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 22px;
-  border: 1px solid var(--line-strong);
-  background: rgba(0, 0, 0, 0.34);
-  color: var(--ink);
-  font-weight: 760;
-  line-height: 1;
 }
 
 .path-heading {
@@ -91,8 +72,7 @@ button {
 }
 
 .path-heading strong,
-.path-heading span,
-.mode-label {
+.path-heading span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -105,14 +85,9 @@ button {
   font-weight: 720;
 }
 
-.path-heading span,
-.mode-label {
+.path-heading span {
   color: var(--muted);
   font-size: 10px;
-}
-
-.mode-label {
-  justify-self: end;
 }
 
 .workspace {
@@ -236,6 +211,7 @@ button {
 .preview-scroll {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow: auto;
   scrollbar-width: none;
 }
@@ -322,7 +298,10 @@ button {
   display: block;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
+  object-position: center;
   background: rgba(0, 0, 0, 0.36);
   transform-origin: center;
   will-change: transform;

@@ -99,6 +99,8 @@ test("sortEntries supports modified descending", () => {
 test("image helpers recognize common image files", () => {
   assert.equal(isLikelyImageFile("photo.JPG"), true);
   assert.equal(imageMimeType("photo.JPG"), "image/jpeg");
+  assert.equal(isLikelyImageFile("poster.WEBP"), true);
+  assert.equal(imageMimeType("poster.WEBP"), "image/webp");
   assert.equal(isLikelyImageFile("notes.md"), false);
 });
 

@@ -35,6 +35,7 @@ repo ignores them.
 ## Navigation
 
 - `j` / `k`: move down or up
+- `gg` / `G`: jump to the first or last item
 - `h`: parent directory
 - `l`: enter a directory, preview a file, or unzip `.zip` and enter the extracted directory
 - `Enter` / `Ctrl+M`: enter, preview, or unzip `.zip` and enter the extracted directory
