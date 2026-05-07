@@ -227,7 +227,15 @@ function PreviewPane({ entry, preview, scrollRef }) {
       return <pre className="text-preview">{preview.text}</pre>;
     }
     if (preview?.type === "pdf" && preview.dataUrl) {
-      return <iframe className="pdf-preview" src={preview.dataUrl} title={entry.name} />;
+      return (
+        <div className="pdf-preview-frame">
+          <iframe
+            className="pdf-preview"
+            src={`${preview.dataUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            title={entry.name}
+          />
+        </div>
+      );
     }
     if (preview?.type === "pdf" && preview.tooLarge) {
       return <div className="preview-note">PDF too large to preview</div>;
