@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
+const { constants: fsConstants } = require("node:fs");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
@@ -36,6 +37,37 @@ function commandExists(command) {
     });
     child.on("exit", (code) => resolve(code === 0));
     child.on("error", () => resolve(false));
+  });
+}
+
+function commandPath(command) {
+  return new Promise((resolve) => {
+    const child = spawn("sh", ["-lc", `command -v ${shellQuote(command)}`], {
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.on("exit", async (code) => {
+      const foundPath = code === 0 ? stdout.trim().split(/\r?\n/)[0] || "" : "";
+      if (foundPath) {
+        resolve(foundPath);
+        return;
+      }
+      for (const directory of ["/usr/bin", "/bin", "/usr/local/bin"]) {
+        const candidate = path.join(directory, command);
+        try {
+          await fs.access(candidate, fsConstants.X_OK);
+          resolve(candidate);
+          return;
+        } catch {
+          // Try the next common system bin directory.
+        }
+      }
+      resolve("");
+    });
+    child.on("error", () => resolve(""));
   });
 }
 
@@ -478,7 +510,9 @@ function runProcess(command, args, options = {}) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString("utf8");
     });
-    child.once("error", reject);
+    child.once("error", (error) => {
+      reject(new Error(`${path.basename(command)} failed: ${error.message}`));
+    });
     child.once("close", (code) => {
       if (code === 0) {
         resolve();
@@ -496,23 +530,26 @@ async function extractZip(filePath) {
     throw new Error("select a .zip file");
   }
 
-  const targetDirectory = await uniqueChildPath(
-    path.dirname(fullPath),
-    path.basename(fullPath, path.extname(fullPath)),
-    { isDirectory: true }
-  );
-  await fs.mkdir(targetDirectory);
+  const parentDirectory = path.dirname(fullPath);
+  await requireDirectory(parentDirectory);
+  const targetDirectory = await uniqueChildPath(parentDirectory, path.basename(fullPath, path.extname(fullPath)), {
+    isDirectory: true
+  });
+  const tempDirectory = await fs.mkdtemp(path.join(parentDirectory, `.${path.basename(targetDirectory)}.o2-`));
 
   try {
-    if (await commandExists("unzip")) {
-      await runProcess("unzip", ["-q", fullPath, "-d", targetDirectory], { cwd: path.dirname(fullPath) });
-    } else if (await commandExists("bsdtar")) {
-      await runProcess("bsdtar", ["-xf", fullPath, "-C", targetDirectory], { cwd: path.dirname(fullPath) });
+    const bsdtarPath = await commandPath("bsdtar");
+    const unzipPath = await commandPath("unzip");
+    if (bsdtarPath) {
+      await runProcess(bsdtarPath, ["-xmf", fullPath, "-C", tempDirectory], { cwd: parentDirectory });
+    } else if (unzipPath) {
+      await runProcess(unzipPath, ["-qDD", fullPath, "-d", tempDirectory], { cwd: parentDirectory });
     } else {
       throw new Error("install unzip or bsdtar to extract zip files");
     }
+    await fs.rename(tempDirectory, targetDirectory);
   } catch (error) {
-    await fs.rm(targetDirectory, { recursive: true, force: true });
+    await fs.rm(tempDirectory, { recursive: true, force: true });
     throw error;
   }
 
