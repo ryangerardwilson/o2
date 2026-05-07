@@ -1,0 +1,26 @@
+{
+  "name": "o2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "o2": "./bin/o2.mjs"
+  },
+  "scripts": {
+    "cli": "node bin/o2.mjs",
+    "dev": "O2_DEV=1 electron --in-process-gpu --disable-gpu-sandbox --disable-vulkan --disable-features=Vulkan,VulkanFromANGLE electron/main.cjs",
+    "desktop": "O2_DEV=1 electron --in-process-gpu --disable-gpu-sandbox --disable-vulkan --disable-features=Vulkan,VulkanFromANGLE electron/main.cjs",
+    "build": "vite build",
+    "test": "node --test test/*.test.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 5173"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vite": "^7.3.0"
+  },
+  "devDependencies": {
+    "electron": "^41.3.0"
+  }
+}
