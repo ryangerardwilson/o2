@@ -39,7 +39,8 @@ repo ignores them.
 - `l`: enter the focused directory or preview the focused file
 - `Enter`: enter the focused directory or preview the focused file
 - `Ctrl+J` / `Ctrl+K`: scroll the preview pane
-- `Ctrl+H` / `Ctrl+L`: back and forward through directory history
+- `Ctrl+H` / `Ctrl+L`: move left and right across the preview pane
+- `-` / `=`: zoom the preview pane out or in
 - `p`: toggle the preview pane
 - `/`: filter by name
 - `?`: shortcut overlay

@@ -10,6 +10,7 @@ const startDir = process.env.O2_START_DIR || process.cwd();
 const focusPath = process.env.O2_FOCUS_PATH || "";
 let viteServer = null;
 let fsModelPromise = null;
+const inputModeByWebContentsId = new Map();
 
 app.commandLine.appendSwitch("in-process-gpu");
 app.commandLine.appendSwitch("disable-gpu-sandbox");
@@ -43,6 +44,20 @@ function splitCommand(value) {
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+}
+
+function normalizedInputKey(input) {
+  const code = String(input.code || "");
+  if (code.startsWith("Key")) {
+    return code.slice(3).toLowerCase();
+  }
+  if (code === "Minus") {
+    return "-";
+  }
+  if (code === "Equal") {
+    return "=";
+  }
+  return String(input.key || "").toLowerCase();
 }
 
 async function resolveTerminalCommand({ workdir, title, command }) {
@@ -353,12 +368,8 @@ function forwardGlobalKeys(window) {
     if (input.type !== "keyDown") {
       return;
     }
-    const key = String(input.key || "").toLowerCase();
-    const codeKey = String(input.code || "").startsWith("Key")
-      ? String(input.code || "").slice(3).toLowerCase()
-      : "";
-    const normalizedKey = codeKey || key;
-    if (input.control && !input.alt && !input.meta && (normalizedKey === "j" || normalizedKey === "k")) {
+    const normalizedKey = normalizedInputKey(input);
+    if (input.control && !input.alt && !input.meta && ["h", "j", "k", "l"].includes(normalizedKey)) {
       event.preventDefault();
       window.webContents.send("o2:control-key", normalizedKey);
       return;
@@ -366,6 +377,17 @@ function forwardGlobalKeys(window) {
     if (input.control && !input.alt && !input.meta && normalizedKey === "c") {
       event.preventDefault();
       app.quit();
+      return;
+    }
+    if (
+      !input.control &&
+      !input.alt &&
+      !input.meta &&
+      !inputModeByWebContentsId.get(window.webContents.id) &&
+      (normalizedKey === "-" || normalizedKey === "=" || normalizedKey === "+")
+    ) {
+      event.preventDefault();
+      window.webContents.send("o2:preview-key", normalizedKey === "-" ? "zoom-out" : "zoom-in");
     }
   });
 }
@@ -411,6 +433,9 @@ app.whenReady().then(() => {
   ipcMain.handle("o2:create-file", (_event, args) => createFile(args));
   ipcMain.handle("o2:create-directory", (_event, args) => createDirectory(args));
   ipcMain.handle("o2:rename-path", (_event, args) => renamePath(args));
+  ipcMain.on("o2:set-input-mode", (event, active) => {
+    inputModeByWebContentsId.set(event.sender.id, Boolean(active));
+  });
   ipcMain.on("o2:quit", () => app.quit());
 
   createWindow().catch((error) => {

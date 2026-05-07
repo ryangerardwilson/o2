@@ -27,6 +27,14 @@ contextBridge.exposeInMainWorld("o2", {
     ipcRenderer.on("o2:control-key", listener);
     return () => ipcRenderer.removeListener("o2:control-key", listener);
   },
+  onPreviewKey(handler) {
+    const listener = (_event, key) => handler(key);
+    ipcRenderer.on("o2:preview-key", listener);
+    return () => ipcRenderer.removeListener("o2:preview-key", listener);
+  },
+  setInputMode(active) {
+    ipcRenderer.send("o2:set-input-mode", Boolean(active));
+  },
   quit() {
     ipcRenderer.send("o2:quit");
   }

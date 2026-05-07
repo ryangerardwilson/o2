@@ -4,6 +4,9 @@ const params = new URLSearchParams(window.location.search);
 const START_DIR = params.get("dir") || "/";
 const START_FOCUS = params.get("focus") || "";
 const START_HOME = params.get("home") || "/";
+const MIN_PREVIEW_ZOOM = 0.5;
+const MAX_PREVIEW_ZOOM = 4;
+const PREVIEW_ZOOM_STEP = 0.15;
 
 const HELP_GROUPS = [
   {
@@ -13,7 +16,7 @@ const HELP_GROUPS = [
       ["h / l", "parent / enter or preview"],
       ["enter", "enter or preview"],
       ["ctrl+j / ctrl+k", "scroll preview"],
-      ["ctrl+h / ctrl+l", "history"]
+      ["ctrl+h / ctrl+l", "pan preview"]
     ]
   },
   {
@@ -32,6 +35,7 @@ const HELP_GROUPS = [
     items: [
       ["/", "filter"],
       ["p", "toggle preview"],
+      ["- / =", "zoom preview"],
       [". / ,dot", "dotfiles"],
       [",sa", "sort name"],
       [",sma / ,smd", "sort modified"],
@@ -92,6 +96,35 @@ function clampIndex(index, total) {
 
 function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function previewPanBounds(node, type, zoom, axis) {
+  if (!node) {
+    return { min: 0, max: 0 };
+  }
+  if (type === "pdf") {
+    if (axis === "x") {
+      return {
+        min: 0,
+        max: Math.max(0, Math.floor(node.clientWidth * Math.max(0, zoom - 1) + 22 * zoom))
+      };
+    }
+    return {
+      min: 0,
+      max: Math.max(0, Math.floor(node.clientHeight * Math.max(0, 6 * zoom - 1)))
+    };
+  }
+  if (type === "image") {
+    const size = axis === "x" ? node.clientWidth : node.clientHeight;
+    const limit = Math.max(0, Math.floor(size * Math.max(0, zoom - 1) * 0.5));
+    return { min: -limit, max: limit };
+  }
+  return { min: 0, max: 0 };
+}
+
+function clampPreviewPan(value, node, type, zoom, axis) {
+  const bounds = previewPanBounds(node, type, zoom, axis);
+  return clampNumber(value, bounds.min, bounds.max);
 }
 
 function wrapIndex(index, total) {
@@ -217,7 +250,8 @@ function FileList({ entries, selectedIndex, onSelect }) {
   );
 }
 
-function PreviewPane({ entry, preview, scrollRef, pdfOffset }) {
+function PreviewPane({ entry, preview, scrollRef, previewZoom, previewPanX, previewPanY }) {
+  const previewTransform = `translate3d(${-previewPanX}px, ${-previewPanY}px, 0) scale(${previewZoom})`;
   const content = (() => {
     if (!entry) {
       return (
@@ -228,7 +262,9 @@ function PreviewPane({ entry, preview, scrollRef, pdfOffset }) {
     }
 
     if (preview?.type === "text") {
-      return <pre className="text-preview">{preview.text}</pre>;
+      return (
+        <pre className="text-preview" style={{ fontSize: `${11 * previewZoom}px` }}>{preview.text}</pre>
+      );
     }
     if (preview?.type === "pdf" && preview.dataUrl) {
       return (
@@ -236,7 +272,7 @@ function PreviewPane({ entry, preview, scrollRef, pdfOffset }) {
           <iframe
             className="pdf-preview"
             src={`${preview.dataUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-            style={{ transform: `translateY(-${pdfOffset}px)` }}
+            style={{ transform: previewTransform }}
             title={entry.name}
           />
         </div>
@@ -248,7 +284,7 @@ function PreviewPane({ entry, preview, scrollRef, pdfOffset }) {
     if (preview?.type === "image" && preview.dataUrl) {
       return (
         <div className="image-preview">
-          <img src={preview.dataUrl} alt={entry.name} />
+          <img src={preview.dataUrl} alt={entry.name} style={{ transform: previewTransform }} />
         </div>
       );
     }
@@ -308,7 +344,9 @@ export default function App() {
   const [prompt, setPrompt] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewVisible, setPreviewVisible] = useState(false);
-  const [pdfOffset, setPdfOffset] = useState(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewPanX, setPreviewPanX] = useState(0);
+  const [previewPanY, setPreviewPanY] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [pathHistory, setPathHistory] = useState([START_DIR]);
@@ -387,8 +425,11 @@ export default function App() {
   useEffect(() => {
     if (previewScrollRef.current) {
       previewScrollRef.current.scrollTop = 0;
+      previewScrollRef.current.scrollLeft = 0;
     }
-    setPdfOffset(0);
+    setPreviewZoom(1);
+    setPreviewPanX(0);
+    setPreviewPanY(0);
   }, [selectedEntry, preview]);
 
   const navigateTo = useCallback(
@@ -416,6 +457,25 @@ export default function App() {
     setSelectedIndex((index) => wrapIndex(index + delta, entries.length));
   }, [entries.length]);
 
+  const changePreviewZoom = useCallback((direction) => {
+    if (!previewVisible) {
+      setStatus("preview hidden");
+      return;
+    }
+    const node = previewScrollRef.current;
+    setPreviewZoom((zoom) => {
+      const nextZoom = clampNumber(
+        Number((zoom + direction * PREVIEW_ZOOM_STEP).toFixed(2)),
+        MIN_PREVIEW_ZOOM,
+        MAX_PREVIEW_ZOOM
+      );
+      setPreviewPanX((offset) => clampPreviewPan(offset, node, preview?.type, nextZoom, "x"));
+      setPreviewPanY((offset) => clampPreviewPan(offset, node, preview?.type, nextZoom, "y"));
+      setStatus(`preview zoom ${Math.round(nextZoom * 100)}%`);
+      return nextZoom;
+    });
+  }, [preview?.type, previewVisible]);
+
   const scrollPreview = useCallback((direction) => {
     if (!previewVisible) {
       setStatus("preview hidden");
@@ -426,9 +486,10 @@ export default function App() {
       return;
     }
     const amount = Math.max(80, Math.floor(node.clientHeight * 0.52));
-    if (preview?.type === "pdf") {
-      const maxOffset = Math.max(0, node.clientHeight * 5);
-      setPdfOffset((offset) => clampNumber(offset + direction * amount, 0, maxOffset));
+    if (preview?.type === "pdf" || preview?.type === "image") {
+      setPreviewPanY((offset) => (
+        clampPreviewPan(offset + direction * amount, node, preview?.type, previewZoom, "y")
+      ));
       return;
     }
     node.scrollBy({
@@ -436,21 +497,68 @@ export default function App() {
       left: 0,
       behavior: "auto"
     });
-  }, [preview?.type, previewVisible]);
+  }, [preview?.type, previewVisible, previewZoom]);
+
+  const panPreview = useCallback((direction) => {
+    if (!previewVisible) {
+      setStatus("preview hidden");
+      return;
+    }
+    const node = previewScrollRef.current;
+    if (!node) {
+      return;
+    }
+    const amount = Math.max(80, Math.floor(node.clientWidth * 0.45));
+    if (preview?.type === "pdf" || preview?.type === "image") {
+      setPreviewPanX((offset) => (
+        clampPreviewPan(offset + direction * amount, node, preview?.type, previewZoom, "x")
+      ));
+      return;
+    }
+    node.scrollBy({
+      top: 0,
+      left: direction * amount,
+      behavior: "auto"
+    });
+  }, [preview?.type, previewVisible, previewZoom]);
 
   useEffect(() => {
     if (!window.o2?.onControlKey) {
       return undefined;
     }
     return window.o2.onControlKey((key) => {
+      if (key === "h") {
+        panPreview(-1);
+      }
       if (key === "j") {
         scrollPreview(1);
       }
       if (key === "k") {
         scrollPreview(-1);
       }
+      if (key === "l") {
+        panPreview(1);
+      }
     });
-  }, [scrollPreview]);
+  }, [panPreview, scrollPreview]);
+
+  useEffect(() => {
+    if (!window.o2?.onPreviewKey) {
+      return undefined;
+    }
+    return window.o2.onPreviewKey((key) => {
+      if (key === "zoom-out") {
+        changePreviewZoom(-1);
+      }
+      if (key === "zoom-in") {
+        changePreviewZoom(1);
+      }
+    });
+  }, [changePreviewZoom]);
+
+  useEffect(() => {
+    window.o2?.setInputMode?.(Boolean(prompt) || filterMode || leader !== null);
+  }, [filterMode, leader, prompt]);
 
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
@@ -712,6 +820,18 @@ export default function App() {
         return;
       }
 
+      if (isPlainKey(event, "-")) {
+        event.preventDefault();
+        changePreviewZoom(-1);
+        return;
+      }
+
+      if (isPlainKey(event, "=") || isPlainKey(event, "+")) {
+        event.preventDefault();
+        changePreviewZoom(1);
+        return;
+      }
+
       if (isPlainKey(event, "e")) {
         event.preventDefault();
         openEntry(selectedEntry, "editor");
@@ -728,12 +848,12 @@ export default function App() {
         const key = keyName(event);
         if (key === "h") {
           event.preventDefault();
-          goHistory(-1);
+          panPreview(-1);
           return;
         }
         if (key === "l") {
           event.preventDefault();
-          goHistory(1);
+          panPreview(1);
           return;
         }
         if (key === "j") {
@@ -772,15 +892,16 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    changePreviewZoom,
     filter,
     filterDraft,
     filterMode,
-    goHistory,
     goParent,
     leader,
     moveSelection,
     navigateTo,
     openEntry,
+    panPreview,
     prompt,
     refresh,
     runLeaderCommand,
@@ -793,6 +914,7 @@ export default function App() {
     const parts = [
       `${entries.length ? selectedIndex + 1 : 0}/${entries.length}`,
       previewVisible ? "preview" : "",
+      previewVisible && previewZoom !== 1 ? `${Math.round(previewZoom * 100)}%` : "",
       filter ? `/${filter}` : "",
       leader !== null ? `,${leader}` : "",
       showHidden ? ".dot" : "",
@@ -801,7 +923,7 @@ export default function App() {
       status
     ].filter(Boolean);
     return parts.join("  ");
-  }, [entries.length, filter, leader, loading, previewVisible, selectedIndex, showHidden, sortMode, status]);
+  }, [entries.length, filter, leader, loading, previewVisible, previewZoom, selectedIndex, showHidden, sortMode, status]);
 
   return (
     <main className="app-shell" tabIndex={-1}>
@@ -819,7 +941,14 @@ export default function App() {
       <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>
         <FileList entries={entries} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
         {previewVisible ? (
-          <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} pdfOffset={pdfOffset} />
+          <PreviewPane
+            entry={selectedEntry}
+            preview={preview}
+            scrollRef={previewScrollRef}
+            previewZoom={previewZoom}
+            previewPanX={previewPanX}
+            previewPanY={previewPanY}
+          />
         ) : null}
         {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} /> : null}
         {prompt ? (
