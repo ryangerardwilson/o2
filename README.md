@@ -43,7 +43,7 @@ repo ignores them.
 - `p`: toggle the preview pane
 - `/`: filter by name
 - `?`: shortcut overlay
-- `,dot`: toggle dotfiles
+- `.` or `,dot`: toggle dotfiles
 - `,sa`, `,sma`, `,smd`: sort by name, modified ascending, modified descending
 - `,nf`, `,nd`, `,rn`: create file, create directory, rename selection
 - `e`: open the focused file in Vim

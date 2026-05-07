@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld("o2", {
   renamePath(args) {
     return ipcRenderer.invoke("o2:rename-path", args);
   },
+  onControlKey(handler) {
+    const listener = (_event, key) => handler(key);
+    ipcRenderer.on("o2:control-key", listener);
+    return () => ipcRenderer.removeListener("o2:control-key", listener);
+  },
   quit() {
     ipcRenderer.send("o2:quit");
   }

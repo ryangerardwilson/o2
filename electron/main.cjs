@@ -350,8 +350,20 @@ async function loadApp(window) {
 
 function forwardGlobalKeys(window) {
   window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") {
+      return;
+    }
     const key = String(input.key || "").toLowerCase();
-    if (input.control && !input.alt && !input.meta && key === "c") {
+    const codeKey = String(input.code || "").startsWith("Key")
+      ? String(input.code || "").slice(3).toLowerCase()
+      : "";
+    const normalizedKey = codeKey || key;
+    if (input.control && !input.alt && !input.meta && (normalizedKey === "j" || normalizedKey === "k")) {
+      event.preventDefault();
+      window.webContents.send("o2:control-key", normalizedKey);
+      return;
+    }
+    if (input.control && !input.alt && !input.meta && normalizedKey === "c") {
       event.preventDefault();
       app.quit();
     }

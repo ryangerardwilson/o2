@@ -32,7 +32,7 @@ const HELP_GROUPS = [
     items: [
       ["/", "filter"],
       ["p", "toggle preview"],
-      [",dot", "dotfiles"],
+      [". / ,dot", "dotfiles"],
       [",sa", "sort name"],
       [",sma / ,smd", "sort modified"],
       ["~", "home"],
@@ -88,6 +88,10 @@ function clampIndex(index, total) {
     return 0;
   }
   return Math.max(0, Math.min(total - 1, index));
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function wrapIndex(index, total) {
@@ -213,7 +217,7 @@ function FileList({ entries, selectedIndex, onSelect }) {
   );
 }
 
-function PreviewPane({ entry, preview, scrollRef }) {
+function PreviewPane({ entry, preview, scrollRef, pdfOffset }) {
   const content = (() => {
     if (!entry) {
       return (
@@ -232,6 +236,7 @@ function PreviewPane({ entry, preview, scrollRef }) {
           <iframe
             className="pdf-preview"
             src={`${preview.dataUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            style={{ transform: `translateY(-${pdfOffset}px)` }}
             title={entry.name}
           />
         </div>
@@ -303,6 +308,7 @@ export default function App() {
   const [prompt, setPrompt] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [pdfOffset, setPdfOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [pathHistory, setPathHistory] = useState([START_DIR]);
@@ -382,6 +388,7 @@ export default function App() {
     if (previewScrollRef.current) {
       previewScrollRef.current.scrollTop = 0;
     }
+    setPdfOffset(0);
   }, [selectedEntry, preview]);
 
   const navigateTo = useCallback(
@@ -419,12 +426,31 @@ export default function App() {
       return;
     }
     const amount = Math.max(80, Math.floor(node.clientHeight * 0.52));
+    if (preview?.type === "pdf") {
+      const maxOffset = Math.max(0, node.clientHeight * 5);
+      setPdfOffset((offset) => clampNumber(offset + direction * amount, 0, maxOffset));
+      return;
+    }
     node.scrollBy({
       top: direction * amount,
       left: 0,
       behavior: "auto"
     });
-  }, [previewVisible]);
+  }, [preview?.type, previewVisible]);
+
+  useEffect(() => {
+    if (!window.o2?.onControlKey) {
+      return undefined;
+    }
+    return window.o2.onControlKey((key) => {
+      if (key === "j") {
+        scrollPreview(1);
+      }
+      if (key === "k") {
+        scrollPreview(-1);
+      }
+    });
+  }, [scrollPreview]);
 
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
@@ -654,6 +680,16 @@ export default function App() {
         return;
       }
 
+      if (isPlainKey(event, ".")) {
+        event.preventDefault();
+        setShowHidden((value) => {
+          const next = !value;
+          setStatus(next ? "showing dotfiles" : "hiding dotfiles");
+          return next;
+        });
+        return;
+      }
+
       if (isPlainKey(event, "~")) {
         event.preventDefault();
         navigateTo(START_HOME);
@@ -783,7 +819,7 @@ export default function App() {
       <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>
         <FileList entries={entries} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
         {previewVisible ? (
-          <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} />
+          <PreviewPane entry={selectedEntry} preview={preview} scrollRef={previewScrollRef} pdfOffset={pdfOffset} />
         ) : null}
         {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} /> : null}
         {prompt ? (
