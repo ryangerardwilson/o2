@@ -296,7 +296,9 @@ function safeChildPath(directory, name) {
   }
   const base = path.resolve(directory);
   const fullPath = path.resolve(base, cleanName);
-  if (fullPath !== base && !fullPath.startsWith(`${base}${path.sep}`)) {
+  const root = path.parse(base).root;
+  const insideBase = base === root ? fullPath.startsWith(root) : fullPath.startsWith(`${base}${path.sep}`);
+  if (fullPath !== base && !insideBase) {
     throw new Error("path escapes the current directory");
   }
   return fullPath;
@@ -321,6 +323,200 @@ async function renamePath({ from, name }) {
   const target = safeChildPath(path.dirname(source), name);
   await fs.rename(source, target);
   return { ok: true, path: target };
+}
+
+async function pathExists(fullPath) {
+  try {
+    await fs.access(fullPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSameOrChildPath(parent, child) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function duplicateName(baseName, isDirectory, index) {
+  if (isDirectory) {
+    return index === 1 ? `${baseName} copy` : `${baseName} copy ${index}`;
+  }
+  const parsed = path.parse(baseName);
+  const stem = parsed.name || baseName;
+  return index === 1 ? `${stem} copy${parsed.ext}` : `${stem} copy ${index}${parsed.ext}`;
+}
+
+async function uniqueChildPath(directory, baseName, { isDirectory = false } = {}) {
+  const resolvedDirectory = path.resolve(directory);
+  let target = safeChildPath(resolvedDirectory, baseName);
+  if (!(await pathExists(target))) {
+    return target;
+  }
+  for (let index = 1; index < 10000; index += 1) {
+    target = safeChildPath(resolvedDirectory, duplicateName(baseName, isDirectory, index));
+    if (!(await pathExists(target))) {
+      return target;
+    }
+  }
+  throw new Error("could not find an available destination name");
+}
+
+async function requireDirectory(directory) {
+  const resolvedDirectory = path.resolve(directory);
+  const stats = await fs.stat(resolvedDirectory);
+  if (!stats.isDirectory()) {
+    throw new Error("destination must be a directory");
+  }
+  return resolvedDirectory;
+}
+
+function topLevelPaths(paths) {
+  const resolved = Array.from(
+    new Set(paths.map((value) => String(value || "").trim()).filter(Boolean).map((value) => path.resolve(value)))
+  );
+  resolved.sort((left, right) => left.length - right.length);
+  const result = [];
+  for (const candidate of resolved) {
+    if (!result.some((kept) => isSameOrChildPath(kept, candidate))) {
+      result.push(candidate);
+    }
+  }
+  return result;
+}
+
+async function pasteOnePath({ source, dir, mode }) {
+  const sourcePath = path.resolve(source);
+  const targetDirectory = await requireDirectory(dir);
+  const sourceStats = await fs.stat(sourcePath);
+  const sourceName = path.basename(sourcePath);
+  const isDirectory = sourceStats.isDirectory();
+  const operation = mode === "move" ? "move" : "copy";
+
+  if (isDirectory && isSameOrChildPath(sourcePath, targetDirectory)) {
+    throw new Error("cannot paste a folder inside itself");
+  }
+
+  if (operation === "move" && path.resolve(path.dirname(sourcePath)) === targetDirectory) {
+    return { ok: true, mode: operation, path: sourcePath, name: sourceName, unchanged: true };
+  }
+
+  const target = await uniqueChildPath(targetDirectory, sourceName, { isDirectory });
+
+  if (operation === "copy") {
+    await fs.cp(sourcePath, target, {
+      recursive: true,
+      preserveTimestamps: true,
+      errorOnExist: true,
+      force: false
+    });
+    return { ok: true, mode: operation, path: target, name: path.basename(target) };
+  }
+
+  try {
+    await fs.rename(sourcePath, target);
+  } catch (error) {
+    if (error.code !== "EXDEV") {
+      throw error;
+    }
+    await fs.cp(sourcePath, target, {
+      recursive: true,
+      preserveTimestamps: true,
+      errorOnExist: true,
+      force: false
+    });
+    await fs.rm(sourcePath, { recursive: true, force: false });
+  }
+  return { ok: true, mode: operation, path: target, name: path.basename(target) };
+}
+
+async function pastePaths({ sources, dir, mode }) {
+  const sourcePaths = topLevelPaths(Array.isArray(sources) ? sources : [sources]);
+  if (!sourcePaths.length) {
+    throw new Error("nothing to paste");
+  }
+  const results = [];
+  for (const source of sourcePaths) {
+    results.push(await pasteOnePath({ source, dir, mode }));
+  }
+  return {
+    ok: true,
+    mode: mode === "move" ? "move" : "copy",
+    count: results.length,
+    path: results.find((result) => !result.unchanged)?.path || results[0]?.path || "",
+    results
+  };
+}
+
+async function deletePaths(paths) {
+  const targets = topLevelPaths(Array.isArray(paths) ? paths : [paths]);
+  if (!targets.length) {
+    throw new Error("nothing to delete");
+  }
+  for (const target of targets) {
+    await fs.stat(target);
+    try {
+      if (typeof shell.trashItem !== "function") {
+        throw new Error("trash unavailable");
+      }
+      await shell.trashItem(target);
+    } catch {
+      await fs.rm(target, { recursive: true, force: false });
+    }
+  }
+  return { ok: true, count: targets.length };
+}
+
+function runProcess(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `${command} exited with ${code}`));
+    });
+  });
+}
+
+async function extractZip(filePath) {
+  const fullPath = path.resolve(filePath);
+  const stats = await fs.stat(fullPath);
+  if (!stats.isFile() || path.extname(fullPath).toLowerCase() !== ".zip") {
+    throw new Error("select a .zip file");
+  }
+
+  const targetDirectory = await uniqueChildPath(
+    path.dirname(fullPath),
+    path.basename(fullPath, path.extname(fullPath)),
+    { isDirectory: true }
+  );
+  await fs.mkdir(targetDirectory);
+
+  try {
+    if (await commandExists("unzip")) {
+      await runProcess("unzip", ["-q", fullPath, "-d", targetDirectory], { cwd: path.dirname(fullPath) });
+    } else if (await commandExists("bsdtar")) {
+      await runProcess("bsdtar", ["-xf", fullPath, "-C", targetDirectory], { cwd: path.dirname(fullPath) });
+    } else {
+      throw new Error("install unzip or bsdtar to extract zip files");
+    }
+  } catch (error) {
+    await fs.rm(targetDirectory, { recursive: true, force: true });
+    throw error;
+  }
+
+  return { ok: true, path: targetDirectory, name: path.basename(targetDirectory) };
 }
 
 async function startViteServer() {
@@ -369,7 +565,13 @@ function forwardGlobalKeys(window) {
       return;
     }
     const normalizedKey = normalizedInputKey(input);
-    if (input.control && !input.alt && !input.meta && ["h", "j", "k", "l"].includes(normalizedKey)) {
+    if (
+      input.control &&
+      !input.alt &&
+      !input.meta &&
+      !inputModeByWebContentsId.get(window.webContents.id) &&
+      ["h", "j", "k", "l", "m"].includes(normalizedKey)
+    ) {
       event.preventDefault();
       window.webContents.send("o2:control-key", normalizedKey);
       return;
@@ -433,6 +635,9 @@ app.whenReady().then(() => {
   ipcMain.handle("o2:create-file", (_event, args) => createFile(args));
   ipcMain.handle("o2:create-directory", (_event, args) => createDirectory(args));
   ipcMain.handle("o2:rename-path", (_event, args) => renamePath(args));
+  ipcMain.handle("o2:paste-paths", (_event, args) => pastePaths(args));
+  ipcMain.handle("o2:delete-paths", (_event, paths) => deletePaths(paths));
+  ipcMain.handle("o2:extract-zip", (_event, filePath) => extractZip(filePath));
   ipcMain.on("o2:set-input-mode", (event, active) => {
     inputModeByWebContentsId.set(event.sender.id, Boolean(active));
   });

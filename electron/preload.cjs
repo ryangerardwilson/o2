@@ -22,6 +22,15 @@ contextBridge.exposeInMainWorld("o2", {
   renamePath(args) {
     return ipcRenderer.invoke("o2:rename-path", args);
   },
+  pastePaths(args) {
+    return ipcRenderer.invoke("o2:paste-paths", args);
+  },
+  deletePaths(paths) {
+    return ipcRenderer.invoke("o2:delete-paths", paths);
+  },
+  extractZip(filePath) {
+    return ipcRenderer.invoke("o2:extract-zip", filePath);
+  },
   onControlKey(handler) {
     const listener = (_event, key) => handler(key);
     ipcRenderer.on("o2:control-key", listener);

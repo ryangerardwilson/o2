@@ -180,6 +180,19 @@ button {
   background: rgba(255, 255, 255, 0.09);
 }
 
+.file-row.marked {
+  color: var(--ink);
+  background: rgba(160, 255, 190, 0.075);
+}
+
+.file-row.selected.marked {
+  background: rgba(160, 255, 190, 0.13);
+}
+
+.file-row.visual.marked {
+  box-shadow: inset 2px 0 0 rgba(160, 255, 190, 0.62);
+}
+
 .file-cursor,
 .file-kind,
 .file-meta {
@@ -188,7 +201,8 @@ button {
 }
 
 .file-row.selected .file-cursor,
-.file-row.selected .file-kind {
+.file-row.selected .file-kind,
+.file-row.marked .file-cursor {
   color: var(--ink);
 }
 
@@ -458,6 +472,77 @@ button {
 
 .prompt-modal input:focus {
   border-color: rgba(255, 255, 255, 0.52);
+}
+
+.unzip-layer {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(10px) saturate(110%);
+}
+
+.matrix-rain {
+  position: absolute;
+  inset: -30% 0;
+  display: grid;
+  grid-template-columns: repeat(32, minmax(0, 1fr));
+  gap: 2px;
+  opacity: 0.58;
+}
+
+.matrix-column {
+  justify-self: center;
+  color: rgba(154, 255, 190, 0.72);
+  font-size: 10px;
+  line-height: 1.1;
+  text-shadow: 0 0 12px rgba(154, 255, 190, 0.42);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  animation: matrix-fall 1.7s linear infinite;
+}
+
+.unzip-status {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  min-width: min(360px, 80vw);
+  padding: 16px;
+  border: 1px solid rgba(154, 255, 190, 0.34);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  box-shadow: var(--shadow);
+}
+
+.unzip-status strong,
+.unzip-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unzip-status strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.unzip-status span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@keyframes matrix-fall {
+  from {
+    transform: translateY(-16%);
+  }
+  to {
+    transform: translateY(16%);
+  }
 }
 
 @media (max-width: 820px) {

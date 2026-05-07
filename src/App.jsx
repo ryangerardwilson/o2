@@ -13,8 +13,8 @@ const HELP_GROUPS = [
     title: "navigation",
     items: [
       ["j / k", "move down / up"],
-      ["h / l", "parent / enter or preview"],
-      ["enter", "enter or preview"],
+      ["h / l", "parent / enter, preview, unzip"],
+      ["enter / ctrl+m", "enter, preview, unzip"],
       ["ctrl+j / ctrl+k", "scroll preview"],
       ["ctrl+h / ctrl+l", "pan preview"]
     ]
@@ -25,6 +25,9 @@ const HELP_GROUPS = [
       [",nf", "new file"],
       [",nd", "new directory"],
       [",rn", "rename"],
+      ["m / v", "mark / visual"],
+      ["y / dd", "yank / cut"],
+      ["p / x", "paste / delete"],
       ["e", "edit file"],
       ["o", "desktop open"],
       ["r", "refresh"]
@@ -34,7 +37,7 @@ const HELP_GROUPS = [
     title: "view",
     items: [
       ["/", "filter"],
-      ["p", "toggle preview"],
+      ["p", "paste or preview"],
       ["- / =", "zoom preview"],
       [". / ,dot", "dotfiles"],
       [",sa", "sort name"],
@@ -157,6 +160,14 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function isZipEntry(entry) {
+  return Boolean(entry && !entry.isDirectory && entry.extension === ".zip");
+}
+
+function itemLabel(count) {
+  return count === 1 ? "item" : "items";
+}
+
 function Prompt({ prompt, onCancel, onSubmit }) {
   const [value, setValue] = useState(prompt.initialValue || "");
   const inputRef = useRef(null);
@@ -193,10 +204,10 @@ function Prompt({ prompt, onCancel, onSubmit }) {
   );
 }
 
-function HelpOverlay({ onClose }) {
+function HelpOverlay({ onClose, scrollRef }) {
   return (
     <div className="modal-layer" onMouseDown={onClose}>
-      <div className="help-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="help-modal" ref={scrollRef} onMouseDown={(event) => event.stopPropagation()}>
         {HELP_GROUPS.map((group) => (
           <section key={group.title}>
             <h2>{group.title}</h2>
@@ -215,7 +226,7 @@ function HelpOverlay({ onClose }) {
   );
 }
 
-function FileList({ entries, selectedIndex, onSelect }) {
+function FileList({ entries, selectedIndex, onSelect, markedPaths, visualMode }) {
   const selectedRef = useRef(null);
 
   useEffect(() => {
@@ -230,21 +241,25 @@ function FileList({ entries, selectedIndex, onSelect }) {
       {entries.length === 0 ? (
         <div className="empty-row">(empty)</div>
       ) : (
-        entries.map((entry, index) => (
-          <button
-            type="button"
-            ref={index === selectedIndex ? selectedRef : null}
-            key={entry.path}
-            className={`file-row ${index === selectedIndex ? "selected" : ""}`}
-            onMouseEnter={() => onSelect(index)}
-            onFocus={() => onSelect(index)}
-          >
-            <span className="file-cursor">{index === selectedIndex ? ">" : " "}</span>
-            <span className="file-kind">{entry.isDirectory ? "/" : "."}</span>
-            <span className="file-name">{entry.name}{entry.isDirectory ? "/" : ""}</span>
-            <span className="file-meta">{entry.isDirectory ? "dir" : formatBytes(entry.size)}</span>
-          </button>
-        ))
+        entries.map((entry, index) => {
+          const selected = index === selectedIndex;
+          const marked = markedPaths.has(entry.path);
+          return (
+            <button
+              type="button"
+              ref={selected ? selectedRef : null}
+              key={entry.path}
+              className={`file-row ${selected ? "selected" : ""} ${marked ? "marked" : ""} ${visualMode ? "visual" : ""}`}
+              onMouseEnter={() => onSelect(index)}
+              onFocus={() => onSelect(index)}
+            >
+              <span className="file-cursor">{selected ? ">" : marked ? "*" : " "}</span>
+              <span className="file-kind">{entry.isDirectory ? "/" : "."}</span>
+              <span className="file-name">{entry.name}{entry.isDirectory ? "/" : ""}</span>
+              <span className="file-meta">{entry.isDirectory ? "dir" : formatBytes(entry.size)}</span>
+            </button>
+          );
+        })
       )}
     </div>
   );
@@ -328,6 +343,33 @@ function PreviewPane({ entry, preview, scrollRef, previewZoom, previewPanX, prev
   );
 }
 
+function UnzipOverlay({ entry }) {
+  const columns = Array.from({ length: 32 }, (_, index) => index);
+  const stream = "010110100111001011010010111001";
+  return (
+    <div className="unzip-layer">
+      <div className="matrix-rain" aria-hidden="true">
+        {columns.map((index) => (
+          <span
+            className="matrix-column"
+            key={index}
+            style={{
+              animationDelay: `${-index * 0.11}s`,
+              animationDuration: `${1.4 + (index % 7) * 0.18}s`
+            }}
+          >
+            {stream}
+          </span>
+        ))}
+      </div>
+      <div className="unzip-status">
+        <strong>unzipping</strong>
+        <span>{entry?.name || "archive.zip"}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [currentDir, setCurrentDir] = useState(START_DIR);
   const [focusPath, setFocusPath] = useState(START_FOCUS);
@@ -347,18 +389,37 @@ export default function App() {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewPanX, setPreviewPanX] = useState(0);
   const [previewPanY, setPreviewPanY] = useState(0);
+  const [markedPaths, setMarkedPaths] = useState(() => new Set());
+  const [visualMode, setVisualMode] = useState(false);
+  const [visualAnchorIndex, setVisualAnchorIndex] = useState(0);
+  const [fileClipboard, setFileClipboard] = useState(null);
+  const [pendingD, setPendingD] = useState(false);
+  const [extractingZip, setExtractingZip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [pathHistory, setPathHistory] = useState([START_DIR]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const selectedPathRef = useRef(focusPath);
   const previewScrollRef = useRef(null);
+  const helpScrollRef = useRef(null);
 
   const selectedEntry = entries[selectedIndex] || null;
+  const markedEntries = useMemo(
+    () => entries.filter((entry) => markedPaths.has(entry.path)),
+    [entries, markedPaths]
+  );
+  const actionEntries = markedEntries.length > 0 ? markedEntries : selectedEntry ? [selectedEntry] : [];
 
   useEffect(() => {
     selectedPathRef.current = selectedEntry?.path || selectedPathRef.current || focusPath;
   }, [selectedEntry, focusPath]);
+
+  useEffect(() => {
+    setMarkedPaths(new Set());
+    setVisualMode(false);
+    setVisualAnchorIndex(0);
+    setPendingD(false);
+  }, [currentDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -453,9 +514,25 @@ export default function App() {
     [historyIndex]
   );
 
+  const markVisualRange = useCallback((anchorIndex, cursorIndex) => {
+    if (!entries.length) {
+      setMarkedPaths(new Set());
+      return;
+    }
+    const start = Math.min(anchorIndex, cursorIndex);
+    const end = Math.max(anchorIndex, cursorIndex);
+    setMarkedPaths(new Set(entries.slice(start, end + 1).map((entry) => entry.path)));
+  }, [entries]);
+
   const moveSelection = useCallback((delta) => {
-    setSelectedIndex((index) => wrapIndex(index + delta, entries.length));
-  }, [entries.length]);
+    setSelectedIndex((index) => {
+      const nextIndex = wrapIndex(index + delta, entries.length);
+      if (visualMode) {
+        markVisualRange(visualAnchorIndex, nextIndex);
+      }
+      return nextIndex;
+    });
+  }, [entries.length, markVisualRange, visualAnchorIndex, visualMode]);
 
   const changePreviewZoom = useCallback((direction) => {
     if (!previewVisible) {
@@ -522,44 +599,6 @@ export default function App() {
     });
   }, [preview?.type, previewVisible, previewZoom]);
 
-  useEffect(() => {
-    if (!window.o2?.onControlKey) {
-      return undefined;
-    }
-    return window.o2.onControlKey((key) => {
-      if (key === "h") {
-        panPreview(-1);
-      }
-      if (key === "j") {
-        scrollPreview(1);
-      }
-      if (key === "k") {
-        scrollPreview(-1);
-      }
-      if (key === "l") {
-        panPreview(1);
-      }
-    });
-  }, [panPreview, scrollPreview]);
-
-  useEffect(() => {
-    if (!window.o2?.onPreviewKey) {
-      return undefined;
-    }
-    return window.o2.onPreviewKey((key) => {
-      if (key === "zoom-out") {
-        changePreviewZoom(-1);
-      }
-      if (key === "zoom-in") {
-        changePreviewZoom(1);
-      }
-    });
-  }, [changePreviewZoom]);
-
-  useEffect(() => {
-    window.o2?.setInputMode?.(Boolean(prompt) || filterMode || leader !== null);
-  }, [filterMode, leader, prompt]);
-
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
     if (parent === currentDir) {
@@ -568,6 +607,144 @@ export default function App() {
     }
     navigateTo(parent, { focusPath: currentDir });
   }, [currentDir, navigateTo]);
+
+  const togglePreview = useCallback(() => {
+    setPreviewVisible((visible) => {
+      const next = !visible;
+      setStatus(next ? "preview shown" : "preview hidden");
+      return next;
+    });
+  }, []);
+
+  const clearSelectionModes = useCallback(() => {
+    setMarkedPaths(new Set());
+    setVisualMode(false);
+    setVisualAnchorIndex(0);
+    setPendingD(false);
+  }, []);
+
+  const selectedActionItems = useCallback(() => (
+    actionEntries.map((entry) => ({
+      path: entry.path,
+      name: entry.name,
+      isDirectory: entry.isDirectory
+    }))
+  ), [actionEntries]);
+
+  const toggleMark = useCallback(() => {
+    if (!selectedEntry) {
+      setStatus("nothing to mark");
+      return;
+    }
+    setVisualMode(false);
+    setVisualAnchorIndex(selectedIndex);
+    setPendingD(false);
+    setMarkedPaths((paths) => {
+      const next = new Set(paths);
+      if (next.has(selectedEntry.path)) {
+        next.delete(selectedEntry.path);
+        setStatus(`unmarked ${selectedEntry.name}`);
+      } else {
+        next.add(selectedEntry.path);
+        setStatus(`marked ${selectedEntry.name}`);
+      }
+      return next;
+    });
+  }, [selectedEntry, selectedIndex]);
+
+  const toggleVisualMode = useCallback(() => {
+    if (!selectedEntry) {
+      setStatus("nothing to mark");
+      return;
+    }
+    setPendingD(false);
+    setVisualMode((active) => {
+      if (active) {
+        setStatus(`${markedPaths.size} marked`);
+        return false;
+      }
+      setVisualAnchorIndex(selectedIndex);
+      setMarkedPaths(new Set([selectedEntry.path]));
+      setStatus("visual");
+      return true;
+    });
+  }, [markedPaths.size, selectedEntry, selectedIndex]);
+
+  const queueClipboard = useCallback((mode) => {
+    const items = selectedActionItems();
+    if (!items.length) {
+      setStatus("nothing selected");
+      setPendingD(false);
+      return;
+    }
+    setFileClipboard({ mode, items });
+    clearSelectionModes();
+    setStatus(`${mode === "move" ? "cut" : "yanked"} ${items.length} ${itemLabel(items.length)}`);
+  }, [clearSelectionModes, selectedActionItems]);
+
+  const deleteSelection = useCallback(async () => {
+    const items = selectedActionItems();
+    if (!items.length) {
+      setStatus("nothing selected");
+      return;
+    }
+    try {
+      clearSelectionModes();
+      setStatus(`deleting ${items.length} ${itemLabel(items.length)}`);
+      await window.o2.deletePaths(items.map((item) => item.path));
+      setStatus(`deleted ${items.length} ${itemLabel(items.length)}`);
+      setRefreshTick((value) => value + 1);
+    } catch (error) {
+      setStatus(error.message || "delete failed");
+    }
+  }, [clearSelectionModes, selectedActionItems]);
+
+  const pasteClipboard = useCallback(async () => {
+    if (!fileClipboard?.items?.length) {
+      togglePreview();
+      return;
+    }
+    try {
+      setStatus(`${fileClipboard.mode === "move" ? "moving" : "copying"} ${fileClipboard.items.length} ${itemLabel(fileClipboard.items.length)}`);
+      const result = await window.o2.pastePaths({
+        sources: fileClipboard.items.map((item) => item.path),
+        dir: currentDir,
+        mode: fileClipboard.mode
+      });
+      const changedCount = result.results?.filter((item) => !item.unchanged).length || 0;
+      if (fileClipboard.mode === "move" && changedCount > 0) {
+        setFileClipboard(null);
+      }
+      setFocusPath(result.path || "");
+      if (fileClipboard.mode === "move" && changedCount === 0) {
+        setStatus("already here");
+      } else {
+        const count = fileClipboard.mode === "move" ? changedCount : result.count;
+        setStatus(`${fileClipboard.mode === "move" ? "moved" : "copied"} ${count} ${itemLabel(count)}`);
+      }
+      setRefreshTick((value) => value + 1);
+    } catch (error) {
+      setStatus(error.message || "paste failed");
+    }
+  }, [currentDir, fileClipboard, togglePreview]);
+
+  const extractZipEntry = useCallback(async (entry) => {
+    if (!entry) {
+      return;
+    }
+    setExtractingZip(entry);
+    setStatus(`unzipping ${entry.name}`);
+    try {
+      const result = await window.o2.extractZip(entry.path);
+      setFocusPath(result.path || "");
+      setStatus(`unzipped ${entry.name}`);
+      setRefreshTick((value) => value + 1);
+    } catch (error) {
+      setStatus(error.message || "unzip failed");
+    } finally {
+      setExtractingZip(null);
+    }
+  }, []);
 
   const openEntry = useCallback(
     async (entry = selectedEntry, mode = "preview") => {
@@ -585,6 +762,8 @@ export default function App() {
         } else if (mode === "editor") {
           const result = await window.o2.openInEditor(entry.path);
           setStatus(`editing ${entry.name}${result?.terminal ? ` in ${result.terminal}` : ""}`);
+        } else if (isZipEntry(entry)) {
+          await extractZipEntry(entry);
         } else {
           setPreviewVisible(true);
           setStatus(`previewing ${entry.name}`);
@@ -593,7 +772,7 @@ export default function App() {
         setStatus(error.message || "open failed");
       }
     },
-    [navigateTo, selectedEntry]
+    [extractZipEntry, navigateTo, selectedEntry]
   );
 
   const refresh = useCallback(() => {
@@ -696,8 +875,56 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (!window.o2?.onControlKey) {
+      return undefined;
+    }
+    return window.o2.onControlKey((key) => {
+      if (key === "h") {
+        panPreview(-1);
+      }
+      if (key === "j") {
+        scrollPreview(1);
+      }
+      if (key === "k") {
+        scrollPreview(-1);
+      }
+      if (key === "l") {
+        panPreview(1);
+      }
+      if (key === "m") {
+        openEntry();
+      }
+    });
+  }, [openEntry, panPreview, scrollPreview]);
+
+  useEffect(() => {
+    if (!window.o2?.onPreviewKey) {
+      return undefined;
+    }
+    return window.o2.onPreviewKey((key) => {
+      if (key === "zoom-out") {
+        changePreviewZoom(-1);
+      }
+      if (key === "zoom-in") {
+        changePreviewZoom(1);
+      }
+    });
+  }, [changePreviewZoom]);
+
+  useEffect(() => {
+    window.o2?.setInputMode?.(
+      Boolean(prompt) || filterMode || leader !== null || showHelp || pendingD || Boolean(extractingZip)
+    );
+  }, [extractingZip, filterMode, leader, pendingD, prompt, showHelp]);
+
+  useEffect(() => {
     const onKeyDown = (event) => {
       if (prompt) {
+        return;
+      }
+
+      if (extractingZip) {
+        event.preventDefault();
         return;
       }
 
@@ -705,6 +932,16 @@ export default function App() {
         if (isEscape(event) || isPlainKey(event, "h") || isPlainKey(event, "?")) {
           event.preventDefault();
           setShowHelp(false);
+          return;
+        }
+        if (isPlainKey(event, "j")) {
+          event.preventDefault();
+          helpScrollRef.current?.scrollBy({ top: 56, left: 0, behavior: "auto" });
+          return;
+        }
+        if (isPlainKey(event, "k")) {
+          event.preventDefault();
+          helpScrollRef.current?.scrollBy({ top: -56, left: 0, behavior: "auto" });
         }
         return;
       }
@@ -751,6 +988,21 @@ export default function App() {
         return;
       }
 
+      if (pendingD) {
+        if (isEscape(event)) {
+          event.preventDefault();
+          setPendingD(false);
+          setStatus("cut canceled");
+          return;
+        }
+        if (isPlainKey(event, "d")) {
+          event.preventDefault();
+          queueClipboard("move");
+          return;
+        }
+        setPendingD(false);
+      }
+
       if (event.ctrlKey && !event.altKey && !event.metaKey && keyName(event) === "c") {
         event.preventDefault();
         window.o2.quit();
@@ -765,7 +1017,7 @@ export default function App() {
 
       if (isPlainKey(event, "?")) {
         event.preventDefault();
-        setShowHelp(true);
+        setShowHelp((value) => !value);
         return;
       }
 
@@ -812,11 +1064,38 @@ export default function App() {
 
       if (isPlainKey(event, "p")) {
         event.preventDefault();
-        setPreviewVisible((visible) => {
-          const next = !visible;
-          setStatus(next ? "preview shown" : "preview hidden");
-          return next;
-        });
+        pasteClipboard();
+        return;
+      }
+
+      if (isPlainKey(event, "m")) {
+        event.preventDefault();
+        toggleMark();
+        return;
+      }
+
+      if (isPlainKey(event, "v")) {
+        event.preventDefault();
+        toggleVisualMode();
+        return;
+      }
+
+      if (isPlainKey(event, "y")) {
+        event.preventDefault();
+        queueClipboard("copy");
+        return;
+      }
+
+      if (isPlainKey(event, "d")) {
+        event.preventDefault();
+        setPendingD(true);
+        setStatus("d");
+        return;
+      }
+
+      if (isPlainKey(event, "x")) {
+        event.preventDefault();
+        deleteSelection();
         return;
       }
 
@@ -893,6 +1172,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     changePreviewZoom,
+    deleteSelection,
+    extractingZip,
     filter,
     filterDraft,
     filterMode,
@@ -902,12 +1183,17 @@ export default function App() {
     navigateTo,
     openEntry,
     panPreview,
+    pasteClipboard,
+    pendingD,
     prompt,
+    queueClipboard,
     refresh,
     runLeaderCommand,
     scrollPreview,
     selectedEntry,
-    showHelp
+    showHelp,
+    toggleMark,
+    toggleVisualMode
   ]);
 
   const statusLine = useMemo(() => {
@@ -915,15 +1201,38 @@ export default function App() {
       `${entries.length ? selectedIndex + 1 : 0}/${entries.length}`,
       previewVisible ? "preview" : "",
       previewVisible && previewZoom !== 1 ? `${Math.round(previewZoom * 100)}%` : "",
+      visualMode ? "visual" : "",
+      markedPaths.size ? `${markedPaths.size} marked` : "",
+      fileClipboard?.items?.length
+        ? `${fileClipboard.mode === "move" ? "cut" : "yank"} ${fileClipboard.items.length}`
+        : "",
+      pendingD ? "d" : "",
       filter ? `/${filter}` : "",
       leader !== null ? `,${leader}` : "",
       showHidden ? ".dot" : "",
       sortMode === "alpha" ? "" : sortMode.replace("_", " "),
       loading ? "loading" : "",
+      extractingZip ? "unzipping" : "",
       status
     ].filter(Boolean);
     return parts.join("  ");
-  }, [entries.length, filter, leader, loading, previewVisible, previewZoom, selectedIndex, showHidden, sortMode, status]);
+  }, [
+    entries.length,
+    extractingZip,
+    fileClipboard,
+    filter,
+    leader,
+    loading,
+    markedPaths.size,
+    pendingD,
+    previewVisible,
+    previewZoom,
+    selectedIndex,
+    showHidden,
+    sortMode,
+    status,
+    visualMode
+  ]);
 
   return (
     <main className="app-shell" tabIndex={-1}>
@@ -939,7 +1248,13 @@ export default function App() {
       </header>
 
       <section className={`workspace ${previewVisible ? "preview-open" : ""}`}>
-        <FileList entries={entries} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
+        <FileList
+          entries={entries}
+          selectedIndex={selectedIndex}
+          onSelect={setSelectedIndex}
+          markedPaths={markedPaths}
+          visualMode={visualMode}
+        />
         {previewVisible ? (
           <PreviewPane
             entry={selectedEntry}
@@ -950,7 +1265,8 @@ export default function App() {
             previewPanY={previewPanY}
           />
         ) : null}
-        {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} /> : null}
+        {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} scrollRef={helpScrollRef} /> : null}
+        {extractingZip ? <UnzipOverlay entry={extractingZip} /> : null}
         {prompt ? (
           <Prompt
             prompt={prompt}
