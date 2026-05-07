@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("o2", {
   extractZip(filePath) {
     return ipcRenderer.invoke("o2:extract-zip", filePath);
   },
+  runShellCommand(args) {
+    return ipcRenderer.invoke("o2:run-shell-command", args);
+  },
   onControlKey(handler) {
     const listener = (_event, key) => handler(key);
     ipcRenderer.on("o2:control-key", listener);

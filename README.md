@@ -48,6 +48,7 @@ repo ignores them.
 - `dd`: cut marked files and folders, or the focused item
 - `p`: paste yanked/cut items, or toggle preview when the clipboard is empty
 - `x`: delete marked files and folders, or the focused item
+- `:! <command>`: run a Bash command in the current directory and show its output
 - `/`: filter by name
 - `?`: toggle the shortcut overlay; use `j` / `k` inside it
 - `.` or `,dot`: toggle dotfiles

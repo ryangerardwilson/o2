@@ -9,6 +9,8 @@ const { pathToFileURL } = require("node:url");
 const appRoot = path.resolve(__dirname, "..");
 const startDir = process.env.O2_START_DIR || process.cwd();
 const focusPath = process.env.O2_FOCUS_PATH || "";
+const shellOutputLimit = 256 * 1024;
+const shellTimeoutMs = 120000;
 let viteServer = null;
 let fsModelPromise = null;
 const inputModeByWebContentsId = new Map();
@@ -319,6 +321,110 @@ async function previewPath(filePath) {
     mtimeMs: stats.mtimeMs,
     text: buffer.toString("utf8").slice(0, 12000)
   };
+}
+
+function appendLimitedOutput(current, chunk, state) {
+  if (state.truncated) {
+    return current;
+  }
+  const next = current + chunk.toString("utf8");
+  if (Buffer.byteLength(next, "utf8") <= shellOutputLimit) {
+    return next;
+  }
+  state.truncated = true;
+  return `${next.slice(0, shellOutputLimit)}\n[o2: output truncated]\n`;
+}
+
+function cleanShellOutput(value) {
+  return String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/\^@/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g, "")
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !/^bash: cannot set terminal process group /.test(line) &&
+        line !== "bash: no job control in this shell"
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+async function shellRunner(command) {
+  const bashrc = path.join(os.homedir(), ".bashrc");
+  if (await commandExists("script")) {
+    return {
+      executable: "script",
+      args: [
+        "-q",
+        "-e",
+        "-c",
+        `bash --rcfile ${shellQuote(bashrc)} -ic ${shellQuote(command)}`,
+        "/dev/null"
+      ]
+    };
+  }
+  return {
+    executable: "bash",
+    args: ["--rcfile", bashrc, "-ic", command]
+  };
+}
+
+async function runShellCommand({ dir, command } = {}) {
+  const shellCommand = String(command || "").trim();
+  if (!shellCommand) {
+    throw new Error("shell command required");
+  }
+
+  const cwd = path.resolve(dir || startDir);
+  const stats = await fs.stat(cwd);
+  if (!stats.isDirectory()) {
+    throw new Error("shell command cwd must be a directory");
+  }
+
+  const runner = await shellRunner(shellCommand);
+  return new Promise((resolve, reject) => {
+    const child = spawn(runner.executable, runner.args, {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const state = { truncated: false };
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, shellTimeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout = appendLimitedOutput(stdout, chunk, state);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = appendLimitedOutput(stderr, chunk, state);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({
+        command: shellCommand,
+        cwd,
+        code,
+        signal,
+        timedOut,
+        truncated: state.truncated,
+        stdout: cleanShellOutput(stdout),
+        stderr: cleanShellOutput(stderr)
+      });
+    });
+  });
 }
 
 function safeChildPath(directory, name) {
@@ -675,6 +781,7 @@ app.whenReady().then(() => {
   ipcMain.handle("o2:paste-paths", (_event, args) => pastePaths(args));
   ipcMain.handle("o2:delete-paths", (_event, paths) => deletePaths(paths));
   ipcMain.handle("o2:extract-zip", (_event, filePath) => extractZip(filePath));
+  ipcMain.handle("o2:run-shell-command", (_event, args) => runShellCommand(args));
   ipcMain.on("o2:set-input-mode", (event, active) => {
     inputModeByWebContentsId.set(event.sender.id, Boolean(active));
   });

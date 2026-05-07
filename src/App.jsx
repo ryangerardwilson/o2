@@ -39,6 +39,7 @@ const HELP_GROUPS = [
     items: [
       ["/", "filter"],
       ["p", "paste or preview"],
+      [":! cmd", "run shell command"],
       ["- / =", "zoom preview"],
       [". / ,dot", "dotfiles"],
       [",sa", "sort name"],
@@ -224,6 +225,64 @@ function HelpOverlay({ onClose, scrollRef }) {
   );
 }
 
+function shellStatusText(result) {
+  if (result?.timedOut) {
+    return "timed out";
+  }
+  if (result?.signal) {
+    return `signal ${result.signal}`;
+  }
+  if (typeof result?.code === "number") {
+    return `exit ${result.code}`;
+  }
+  return "finished";
+}
+
+function ShellOutputModal({ bodyRef, result, onClose }) {
+  const hasStdout = Boolean(result?.stdout);
+  const hasStderr = Boolean(result?.stderr);
+
+  return (
+    <div className="modal-layer" role="presentation" onMouseDown={onClose}>
+      <section
+        className="shell-output-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="shell command output"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="shell-output-header">
+          <div>
+            <div className="shell-output-title">shell</div>
+            <code>{result.command}</code>
+          </div>
+          <button type="button" onClick={onClose}>close</button>
+        </header>
+        <div className="shell-output-meta">
+          <span>{shellStatusText(result)}</span>
+          {result.truncated ? <span>truncated</span> : null}
+          {result.cwd ? <span>{result.cwd}</span> : null}
+        </div>
+        <div ref={bodyRef} className="shell-output-body" tabIndex={-1}>
+          {hasStdout ? (
+            <section>
+              <h2>stdout</h2>
+              <pre>{result.stdout}</pre>
+            </section>
+          ) : null}
+          {hasStderr ? (
+            <section>
+              <h2>stderr</h2>
+              <pre>{result.stderr}</pre>
+            </section>
+          ) : null}
+          {!hasStdout && !hasStderr ? <pre className="shell-output-empty">no output</pre> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function FileList({ entries, selectedIndex, onSelect, markedPaths, visualMode }) {
   const listRef = useRef(null);
   const selectedRef = useRef(null);
@@ -394,6 +453,8 @@ export default function App() {
   const [sortMode, setSortMode] = useState("alpha");
   const [status, setStatus] = useState("");
   const [leader, setLeader] = useState(null);
+  const [commandMode, setCommandMode] = useState(false);
+  const [commandDraft, setCommandDraft] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [prompt, setPrompt] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -406,6 +467,8 @@ export default function App() {
   const [visualAnchorIndex, setVisualAnchorIndex] = useState(0);
   const [visualBasePaths, setVisualBasePaths] = useState(() => new Set());
   const [fileClipboard, setFileClipboard] = useState(null);
+  const [shellOutput, setShellOutput] = useState(null);
+  const [shellOutputOpen, setShellOutputOpen] = useState(false);
   const [pendingD, setPendingD] = useState(false);
   const [pendingG, setPendingG] = useState(false);
   const [extractingZip, setExtractingZip] = useState(null);
@@ -414,8 +477,10 @@ export default function App() {
   const [pathHistory, setPathHistory] = useState([START_DIR]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const selectedPathRef = useRef(focusPath);
+  const commandInputRef = useRef(null);
   const previewScrollRef = useRef(null);
   const helpScrollRef = useRef(null);
+  const shellOutputBodyRef = useRef(null);
 
   const cutPathSet = useMemo(() => (
     new Set(fileClipboard?.mode === "move" ? fileClipboard.items.map((item) => item.path) : [])
@@ -434,6 +499,18 @@ export default function App() {
   useEffect(() => {
     selectedPathRef.current = selectedEntry?.path || selectedPathRef.current || focusPath;
   }, [selectedEntry, focusPath]);
+
+  useEffect(() => {
+    if (commandMode) {
+      commandInputRef.current?.focus();
+    }
+  }, [commandMode]);
+
+  useEffect(() => {
+    if (shellOutputOpen) {
+      shellOutputBodyRef.current?.focus();
+    }
+  }, [shellOutputOpen]);
 
   useEffect(() => {
     setSelectedIndex((index) => clampIndex(index, visibleEntries.length));
@@ -637,6 +714,75 @@ export default function App() {
       behavior: "auto"
     });
   }, [preview?.type, previewVisible, previewZoom]);
+
+  const scrollShellOutput = useCallback((direction) => {
+    const node = shellOutputBodyRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollBy({
+      top: direction * Math.max(80, Math.floor(node.clientHeight * 0.28)),
+      left: 0,
+      behavior: "auto"
+    });
+  }, []);
+
+  const runShellCommand = useCallback(
+    async (rawCommand) => {
+      const command = String(rawCommand || "").trim();
+      if (!command) {
+        setStatus("shell command required");
+        return;
+      }
+
+      setCommandMode(false);
+      setCommandDraft("");
+      setStatus(`running: ${command}`);
+      try {
+        const result = await window.o2.runShellCommand({ dir: currentDir, command });
+        setShellOutput(result);
+        setShellOutputOpen(true);
+        if (result.timedOut) {
+          setStatus("shell command timed out");
+        } else {
+          setStatus(result.code === 0 ? "shell command complete" : `shell exited ${result.code}`);
+        }
+      } catch (error) {
+        setShellOutput({
+          command,
+          cwd: currentDir,
+          code: null,
+          signal: null,
+          timedOut: false,
+          truncated: false,
+          stdout: "",
+          stderr: error.message || "shell command failed"
+        });
+        setShellOutputOpen(true);
+        setStatus(error.message || "shell command failed");
+      }
+    },
+    [currentDir]
+  );
+
+  const runCommand = useCallback(
+    (rawCommand) => {
+      const value = String(rawCommand || "").trim();
+      if (!value) {
+        setCommandMode(false);
+        setCommandDraft("");
+        return;
+      }
+      if (value.startsWith("!")) {
+        runShellCommand(value.slice(1));
+        return;
+      }
+      setCommandMode(false);
+      setCommandDraft("");
+      setStatus(`unknown command: ${value}`);
+    },
+    [runShellCommand]
+  );
 
   const goParent = useCallback(() => {
     const parent = parentPath(currentDir);
@@ -958,9 +1104,17 @@ export default function App() {
 
   useEffect(() => {
     window.o2?.setInputMode?.(
-      Boolean(prompt) || filterMode || leader !== null || showHelp || pendingD || pendingG || Boolean(extractingZip)
+      commandMode ||
+        Boolean(prompt) ||
+        filterMode ||
+        leader !== null ||
+        showHelp ||
+        shellOutputOpen ||
+        pendingD ||
+        pendingG ||
+        Boolean(extractingZip)
     );
-  }, [extractingZip, filterMode, leader, pendingD, pendingG, prompt, showHelp]);
+  }, [commandMode, extractingZip, filterMode, leader, pendingD, pendingG, prompt, shellOutputOpen, showHelp]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -968,8 +1122,30 @@ export default function App() {
         return;
       }
 
+      if (commandMode) {
+        return;
+      }
+
       if (extractingZip) {
         event.preventDefault();
+        return;
+      }
+
+      if (shellOutputOpen) {
+        if (isEscape(event) || isPlainKey(event, "h") || isPlainKey(event, "q")) {
+          event.preventDefault();
+          setShellOutputOpen(false);
+          return;
+        }
+        if (isPlainKey(event, "j")) {
+          event.preventDefault();
+          scrollShellOutput(1);
+          return;
+        }
+        if (isPlainKey(event, "k")) {
+          event.preventDefault();
+          scrollShellOutput(-1);
+        }
         return;
       }
 
@@ -1080,6 +1256,15 @@ export default function App() {
       if (isPlainKey(event, "?")) {
         event.preventDefault();
         setShowHelp((value) => !value);
+        return;
+      }
+
+      if (isPlainKey(event, ":")) {
+        event.preventDefault();
+        setCommandDraft("");
+        setCommandMode(true);
+        setPendingD(false);
+        setPendingG(false);
         return;
       }
 
@@ -1251,6 +1436,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     changePreviewZoom,
+    commandMode,
     deleteSelection,
     extractingZip,
     filter,
@@ -1271,7 +1457,9 @@ export default function App() {
     refresh,
     runLeaderCommand,
     scrollPreview,
+    scrollShellOutput,
     selectedEntry,
+    shellOutputOpen,
     showHelp,
     toggleMark,
     toggleVisualMode,
@@ -1346,6 +1534,13 @@ export default function App() {
           />
         ) : null}
         {showHelp ? <HelpOverlay onClose={() => setShowHelp(false)} scrollRef={helpScrollRef} /> : null}
+        {shellOutputOpen && shellOutput ? (
+          <ShellOutputModal
+            bodyRef={shellOutputBodyRef}
+            result={shellOutput}
+            onClose={() => setShellOutputOpen(false)}
+          />
+        ) : null}
         {extractingZip ? <UnzipOverlay entry={extractingZip} /> : null}
         {prompt ? (
           <Prompt
@@ -1356,8 +1551,35 @@ export default function App() {
         ) : null}
       </section>
 
-      <footer className="statusbar">
-        <span>{filterMode ? `/${filterDraft.replace(/^\//, "")}` : statusLine}</span>
+      <footer className={`statusbar ${commandMode ? "command" : ""}`}>
+        {commandMode ? (
+          <form
+            className="command-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              runCommand(commandDraft);
+            }}
+          >
+            <span>:</span>
+            <input
+              ref={commandInputRef}
+              value={commandDraft}
+              spellCheck="false"
+              onChange={(event) => setCommandDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (isEscape(event)) {
+                  event.preventDefault();
+                  setCommandMode(false);
+                  setCommandDraft("");
+                  setStatus("command canceled");
+                }
+              }}
+              aria-label="command"
+            />
+          </form>
+        ) : (
+          <span>{filterMode ? `/${filterDraft.replace(/^\//, "")}` : statusLine}</span>
+        )}
       </footer>
     </main>
   );
