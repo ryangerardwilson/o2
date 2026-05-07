@@ -130,13 +130,6 @@ function clampPreviewPan(value, node, type, zoom, axis) {
   return clampNumber(value, bounds.min, bounds.max);
 }
 
-function wrapIndex(index, total) {
-  if (total <= 0) {
-    return 0;
-  }
-  return ((index % total) + total) % total;
-}
-
 function formatBytes(value) {
   const size = Number(value || 0);
   if (size < 1024) {
@@ -544,7 +537,7 @@ export default function App() {
 
   const moveSelection = useCallback((delta) => {
     setSelectedIndex((index) => {
-      const nextIndex = wrapIndex(index + delta, visibleEntries.length);
+      const nextIndex = clampIndex(index + delta, visibleEntries.length);
       if (visualMode) {
         markVisualRange(visualAnchorIndex, nextIndex);
       }
