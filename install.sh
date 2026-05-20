@@ -2,7 +2,7 @@
 set -euo pipefail
 
 OWNER="ryangerardwilson"
-REPO="o2"
+REPO="vfs"
 APP_NAME="vfs"
 INSTALL_ROOT="${VFS_INSTALL_ROOT:-${VFILES_INSTALL_ROOT:-${O2_INSTALL_ROOT:-$HOME/.vfs}}}"
 APP_DIR="$INSTALL_ROOT/app"

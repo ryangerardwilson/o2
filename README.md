@@ -20,7 +20,7 @@ Make sure `~/.local/bin` is on your `PATH`.
 
 ```bash
 vfs
-vfs ~/Apps/o2
+vfs ~/Apps/vfs
 vfs -h
 vfs -v
 vfs -u

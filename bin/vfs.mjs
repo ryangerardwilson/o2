@@ -26,7 +26,7 @@ features:
 
   open a directory or reveal a file's parent directory
   # vfs <path>
-  vfs ~/Apps/o2
+  vfs ~/Apps/vfs
   vfs README.md
 
   run from source while developing
