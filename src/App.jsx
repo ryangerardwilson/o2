@@ -602,6 +602,11 @@ export default function App() {
   const navigateTo = useCallback(
     (directory, options = {}) => {
       const record = options.record !== false;
+      if (options.clearFilter) {
+        setFilter("");
+        setFilterDraft("");
+        setFilterMode(false);
+      }
       setFocusPath(options.focusPath || "");
       selectedPathRef.current = options.focusPath || "";
       setSelectedIndex(0);
@@ -943,7 +948,7 @@ export default function App() {
         return;
       }
       if (entry.isDirectory) {
-        navigateTo(entry.path);
+        navigateTo(entry.path, { clearFilter: true });
         return;
       }
       try {
