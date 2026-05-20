@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 const appRoot = path.resolve(new URL("..", import.meta.url).pathname);
-const cli = path.join(appRoot, "bin", "o2.mjs");
+const cli = path.join(appRoot, "bin", "vfs.mjs");
 const packageJson = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
 
 function runCli(args) {
@@ -16,16 +16,16 @@ function runCli(args) {
   });
 }
 
-test("o2 -h prints human help", () => {
+test("vfs -h prints human help", () => {
   const result = runCli(["-h"]);
 
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /^o2\n/);
+  assert.match(result.stdout, /^vfs\n/);
   assert.match(result.stdout, /features:/);
   assert.doesNotMatch(result.stdout, /Usage:/);
 });
 
-test("o2 -v prints package version only", () => {
+test("vfs -v prints package version only", () => {
   const result = runCli(["-v"]);
 
   assert.equal(result.status, 0);
@@ -34,9 +34,9 @@ test("o2 -v prints package version only", () => {
 });
 
 test("installed symlink launcher resolves the app root", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "o2-launcher-"));
-  const linkedLauncher = path.join(tempDir, "o2");
-  fs.symlinkSync(path.join(appRoot, "o2"), linkedLauncher);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vfs-launcher-"));
+  const linkedLauncher = path.join(tempDir, "vfs");
+  fs.symlinkSync(path.join(appRoot, "vfs"), linkedLauncher);
 
   const result = spawnSync(linkedLauncher, ["-v"], {
     cwd: tempDir,
@@ -49,7 +49,7 @@ test("installed symlink launcher resolves the app root", () => {
 });
 
 
-test("o2 rejects multiple paths", () => {
+test("vfs rejects multiple paths", () => {
   const result = runCli(["one", "two"]);
 
   assert.equal(result.status, 1);

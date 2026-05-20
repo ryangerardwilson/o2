@@ -37,5 +37,5 @@ jobs:
         run: |
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes "o2 $TAG" \
+            --notes "vfs $TAG" \
             --verify-tag

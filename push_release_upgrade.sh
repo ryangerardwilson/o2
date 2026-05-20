@@ -15,7 +15,7 @@ need gh
 need npm
 need node
 
-[ -d .git ] || die "run from the o2 git repository root"
+[ -d .git ] || die "run from the vfs git repository root"
 [ -f package.json ] || die "package.json not found"
 [ -f install.sh ] || die "install.sh not found"
 

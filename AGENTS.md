@@ -2,7 +2,7 @@
 
 ## Product
 
-`o2` is a CLI-launched Electron file navigator inspired by `o` and `evim`.
+`vfs` is a CLI-launched Electron file navigator inspired by `o` and `evim`.
 
 It is not a terminal TUI, but it keeps the `o` navigation grammar:
 
@@ -22,7 +22,7 @@ It is not a terminal TUI, but it keeps the `o` navigation grammar:
 
 ## Architecture
 
-- `bin/o2.mjs` owns the CLI launcher and `-h`, `-v`, `-u`.
+- `bin/vfs.mjs` owns the CLI launcher and `-h`, `-v`, `-u`.
 - `electron/` owns the Electron shell, preload bridge, and filesystem IPC.
 - `src/` owns the React renderer and shared filesystem model.
 - `test/` owns Node test coverage for CLI contract and filesystem behavior.

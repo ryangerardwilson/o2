@@ -7,14 +7,15 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const appRoot = path.resolve(__dirname, "..");
-const startDir = process.env.O2_START_DIR || process.cwd();
-const focusPath = process.env.O2_FOCUS_PATH || "";
+const startDir = process.env.VFS_START_DIR || process.env.VFILES_START_DIR || process.env.O2_START_DIR || process.cwd();
+const focusPath = process.env.VFS_FOCUS_PATH || process.env.VFILES_FOCUS_PATH || process.env.O2_FOCUS_PATH || "";
 const shellOutputLimit = 256 * 1024;
 const shellTimeoutMs = 120000;
 let viteServer = null;
 let fsModelPromise = null;
 const inputModeByWebContentsId = new Map();
 
+app.setName("vfs");
 app.commandLine.appendSwitch("in-process-gpu");
 app.commandLine.appendSwitch("disable-gpu-sandbox");
 app.commandLine.appendSwitch("disable-vulkan");
@@ -95,7 +96,7 @@ function normalizedInputKey(input) {
 }
 
 async function resolveTerminalCommand({ workdir, title, command }) {
-  const preferred = process.env.O2_TERMINAL || process.env.EVIM_TERMINAL || process.env.TERMINAL || "";
+  const preferred = process.env.VFS_TERMINAL || process.env.VFILES_TERMINAL || process.env.O2_TERMINAL || process.env.EVIM_TERMINAL || process.env.TERMINAL || "";
   const preferredParts = splitCommand(preferred);
   const preferredName = preferredParts[0] || "";
   const preferredBase = path.basename(preferredName);
@@ -204,12 +205,12 @@ async function openInEditor(filePath) {
   if (!stats.isFile()) {
     throw new Error("select a file");
   }
-  const editor = process.env.O2_EDITOR || process.env.EVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
+  const editor = process.env.VFS_EDITOR || process.env.VFILES_EDITOR || process.env.O2_EDITOR || process.env.EVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
   const workdir = path.dirname(fullPath);
   const command = `${editor} ${shellQuote(fullPath)}`;
   const terminal = await resolveTerminalCommand({
     workdir,
-    title: `o2 ${path.basename(fullPath)}`,
+    title: `vfs ${path.basename(fullPath)}`,
     command
   });
   await launchDetached({ ...terminal, workdir });
@@ -332,7 +333,7 @@ function appendLimitedOutput(current, chunk, state) {
     return next;
   }
   state.truncated = true;
-  return `${next.slice(0, shellOutputLimit)}\n[o2: output truncated]\n`;
+  return `${next.slice(0, shellOutputLimit)}\n[vfs: output truncated]\n`;
 }
 
 function cleanShellOutput(value) {
@@ -641,7 +642,7 @@ async function extractZip(filePath) {
   const targetDirectory = await uniqueChildPath(parentDirectory, path.basename(fullPath, path.extname(fullPath)), {
     isDirectory: true
   });
-  const tempDirectory = await fs.mkdtemp(path.join(parentDirectory, `.${path.basename(targetDirectory)}.o2-`));
+  const tempDirectory = await fs.mkdtemp(path.join(parentDirectory, `.${path.basename(targetDirectory)}.vfs-`));
 
   try {
     const bsdtarPath = await commandPath("bsdtar");
@@ -671,7 +672,7 @@ async function startViteServer() {
     root: appRoot,
     server: {
       host: "127.0.0.1",
-      port: Number(process.env.O2_VITE_PORT || 5173),
+      port: Number(process.env.VFS_VITE_PORT || process.env.O2_VITE_PORT || 5173),
       strictPort: false
     }
   });
@@ -686,7 +687,7 @@ async function loadApp(window) {
     home: os.homedir()
   }).toString();
 
-  if (process.env.O2_DEV === "1") {
+  if (process.env.VFS_DEV === "1" || process.env.VFILES_DEV === "1" || process.env.O2_DEV === "1") {
     const url = await startViteServer();
     await window.loadURL(`${url}?${query}`);
     return;
@@ -741,6 +742,7 @@ async function createWindow() {
   Menu.setApplicationMenu(null);
 
   const window = new BrowserWindow({
+    title: "vfs",
     width: 1280,
     height: 860,
     minWidth: 560,

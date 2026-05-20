@@ -3,15 +3,15 @@ set -euo pipefail
 
 OWNER="ryangerardwilson"
 REPO="o2"
-APP_NAME="o2"
-INSTALL_ROOT="${O2_INSTALL_ROOT:-$HOME/.o2}"
+APP_NAME="vfs"
+INSTALL_ROOT="${VFS_INSTALL_ROOT:-${VFILES_INSTALL_ROOT:-${O2_INSTALL_ROOT:-$HOME/.vfs}}}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/$APP_NAME"
 
 usage() {
   cat <<'EOF'
-o2 installer
+vfs installer
 
 flags:
   install.sh -h
@@ -71,9 +71,9 @@ install_from_archive() {
   rm -rf "$APP_DIR"
   mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
   cp -R "$source_dir" "$APP_DIR"
-  chmod +x "$APP_DIR/o2" "$APP_DIR/bin/o2.mjs"
+  chmod +x "$APP_DIR/vfs" "$APP_DIR/bin/vfs.mjs"
   (cd "$APP_DIR" && npm install --omit=dev && npm install --no-save electron@^41.3.0)
-  ln -sfn "$APP_DIR/o2" "$LAUNCHER"
+  ln -sfn "$APP_DIR/vfs" "$LAUNCHER"
 
   if ! printf '%s' ":$PATH:" | grep -q ":$BIN_DIR:"; then
     printf 'Add this to ~/.bashrc if needed:\n'
@@ -81,7 +81,7 @@ install_from_archive() {
   fi
 
   "$LAUNCHER" -v >/dev/null
-  printf 'installed o2 %s\n' "$("$LAUNCHER" -v)"
+  printf 'installed vfs %s\n' "$("$LAUNCHER" -v)"
   rm -rf "$tmp_dir"
 }
 
@@ -105,7 +105,7 @@ upgrade_latest() {
     installed="$("$LAUNCHER" -v 2>/dev/null || true)"
   fi
   if [ "$installed" = "$latest" ]; then
-    printf 'o2 %s already installed\n' "$installed"
+    printf 'vfs %s already installed\n' "$installed"
     return 0
   fi
   install_version "$latest"

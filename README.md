@@ -1,8 +1,9 @@
-# o2
+# vfs
 
-`o2` is an Electron file navigator with `o`-style hjkl movement and `evim`-style
-transparent dark chrome. It opens on the current directory by default and keeps
-the first version focused on a simple keyboard-first file list with preview.
+`vfs` stands for vim file system. It is an Electron file navigator with
+`o`-style hjkl movement and `evim`-style transparent dark chrome. It opens on
+the current directory by default and keeps the first version focused on a
+simple keyboard-first file list with preview.
 
 ## Install
 
@@ -10,7 +11,7 @@ From a source checkout:
 
 ```bash
 npm install
-ln -sfn "$PWD/o2" "$HOME/.local/bin/o2"
+ln -sfn "$PWD/vfs" "$HOME/.local/bin/vfs"
 ```
 
 Make sure `~/.local/bin` is on your `PATH`.
@@ -18,17 +19,17 @@ Make sure `~/.local/bin` is on your `PATH`.
 ## CLI
 
 ```bash
-o2
-o2 ~/Apps/o2
-o2 -h
-o2 -v
-o2 -u
+vfs
+vfs ~/Apps/o2
+vfs -h
+vfs -v
+vfs -u
 ```
 
-Running `o2` with no path opens the current working directory. Passing a file
+Running `vfs` with no path opens the current working directory. Passing a file
 opens its parent directory and focuses the file when possible.
 
-Unlike `o`, `o2` does not hide gitignored entries by default. Desktop
+Unlike `o`, `vfs` does not hide gitignored entries by default. Desktop
 navigation should show ordinary folders such as `~/Downloads` even when a parent
 repo ignores them.
 
@@ -67,7 +68,7 @@ toggle it, or press `l` on a file to show it. It supports text files, common
 image formats, and PDFs.
 
 ```bash
-O2_TERMINAL=alacritty O2_EDITOR=nvim o2
+VFS_TERMINAL=alacritty VFS_EDITOR=nvim vfs
 ```
 
 ## Development
@@ -79,15 +80,15 @@ npm test
 npm run build
 ```
 
-`o2 -v` prints the installed app version from `package.json`.
+`vfs -v` prints the installed app version from `package.json`.
 
 ## Release
 
-`o2` follows the local RGW CLI contract:
+`vfs` follows the local RGW CLI contract:
 
-- `o2 -h` prints help.
-- `o2 -v` prints the installed version from `package.json`.
-- `o2 -u` delegates to the installer upgrade path.
+- `vfs -h` prints help.
+- `vfs -v` prints the installed version from `package.json`.
+- `vfs -u` delegates to the installer upgrade path.
 - `install.sh -h`, `install.sh -v`, `install.sh -v <version>`, `install.sh -u`,
   and `install.sh -b <archive.tar.gz>` are supported.
 

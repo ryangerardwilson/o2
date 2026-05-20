@@ -9,25 +9,25 @@ import { normalizeStartPath } from "../src/fsModel.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 
-const HELP = `o2
+const HELP = `vfs
 
 flags:
-  o2 -h
+  vfs -h
     show this help
-  o2 -v
+  vfs -v
     print the installed version
-  o2 -u
+  vfs -u
     upgrade through the installer
 
 features:
   open the Electron navigator in the current directory
-  # o2
-  o2
+  # vfs
+  vfs
 
   open a directory or reveal a file's parent directory
-  # o2 <path>
-  o2 ~/Apps/o2
-  o2 README.md
+  # vfs <path>
+  vfs ~/Apps/o2
+  vfs README.md
 
   run from source while developing
   # npm run desktop
@@ -40,7 +40,7 @@ async function packageVersion() {
 }
 
 function runInstallerUpgrade() {
-  const installScript = process.env.O2_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
+  const installScript = process.env.VFS_INSTALL_SCRIPT || process.env.VFILES_INSTALL_SCRIPT || process.env.O2_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
   return new Promise((resolve, reject) => {
     const child = spawn(installScript, ["-u"], {
       cwd: appRoot,
@@ -71,6 +71,8 @@ function runElectron({ directory, focusPath }) {
         stdio: "inherit",
         env: {
           ...process.env,
+          VFS_START_DIR: directory,
+          VFS_FOCUS_PATH: focusPath || "",
           O2_START_DIR: directory,
           O2_FOCUS_PATH: focusPath || ""
         }
@@ -113,6 +115,6 @@ async function main(argv) {
 main(process.argv.slice(2))
   .then((code) => process.exit(code))
   .catch((error) => {
-    process.stderr.write(`o2: ${error.message}\n`);
+    process.stderr.write(`vfs: ${error.message}\n`);
     process.exit(1);
   });
