@@ -528,7 +528,7 @@ export default function App() {
     let cancelled = false;
     const requestedFocus = focusPath || selectedPathRef.current;
     setLoading(true);
-    window.o2
+    window.vfs
       .listDirectory({
         dir: currentDir,
         showHidden,
@@ -572,7 +572,7 @@ export default function App() {
       setPreview(null);
       return undefined;
     }
-    window.o2
+    window.vfs
       .previewPath(selectedEntry.path)
       .then((nextPreview) => {
         if (!cancelled) {
@@ -744,7 +744,7 @@ export default function App() {
       setCommandDraft("");
       setStatus(`running: ${command}`);
       try {
-        const result = await window.o2.runShellCommand({ dir: currentDir, command });
+        const result = await window.vfs.runShellCommand({ dir: currentDir, command });
         setShellOutput(result);
         setShellOutputOpen(true);
         if (result.timedOut) {
@@ -886,7 +886,7 @@ export default function App() {
     try {
       clearSelectionModes();
       setStatus(`deleting ${items.length} ${itemLabel(items.length)}`);
-      await window.o2.deletePaths(items.map((item) => item.path));
+      await window.vfs.deletePaths(items.map((item) => item.path));
       setStatus(`deleted ${items.length} ${itemLabel(items.length)}`);
       setRefreshTick((value) => value + 1);
     } catch (error) {
@@ -901,7 +901,7 @@ export default function App() {
     }
     try {
       setStatus(`${fileClipboard.mode === "move" ? "moving" : "copying"} ${fileClipboard.items.length} ${itemLabel(fileClipboard.items.length)}`);
-      const result = await window.o2.pastePaths({
+      const result = await window.vfs.pastePaths({
         sources: fileClipboard.items.map((item) => item.path),
         dir: currentDir,
         mode: fileClipboard.mode
@@ -930,7 +930,7 @@ export default function App() {
     setExtractingZip(entry);
     setStatus(`unzipping ${entry.name}`);
     try {
-      const result = await window.o2.extractZip(entry.path);
+      const result = await window.vfs.extractZip(entry.path);
       if (result.path) {
         navigateTo(result.path);
       }
@@ -953,10 +953,10 @@ export default function App() {
       }
       try {
         if (mode === "external") {
-          await window.o2.openExternal(entry.path);
+          await window.vfs.openExternal(entry.path);
           setStatus(`opened ${entry.name}`);
         } else if (mode === "editor") {
-          const result = await window.o2.openInEditor(entry.path);
+          const result = await window.vfs.openInEditor(entry.path);
           setStatus(`editing ${entry.name}${result?.terminal ? ` in ${result.terminal}` : ""}`);
         } else if (isZipEntry(entry)) {
           await extractZipEntry(entry);
@@ -1050,13 +1050,13 @@ export default function App() {
       try {
         let result;
         if (prompt.type === "file") {
-          result = await window.o2.createFile({ dir: currentDir, name });
+          result = await window.vfs.createFile({ dir: currentDir, name });
           setStatus(`created ${name}`);
         } else if (prompt.type === "directory") {
-          result = await window.o2.createDirectory({ dir: currentDir, name });
+          result = await window.vfs.createDirectory({ dir: currentDir, name });
           setStatus(`created ${name}/`);
         } else if (prompt.type === "rename" && selectedEntry) {
-          result = await window.o2.renamePath({ from: selectedEntry.path, name });
+          result = await window.vfs.renamePath({ from: selectedEntry.path, name });
           setStatus(`renamed to ${name}`);
         }
         setPrompt(null);
@@ -1071,10 +1071,10 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (!window.o2?.onControlKey) {
+    if (!window.vfs?.onControlKey) {
       return undefined;
     }
-    return window.o2.onControlKey((key) => {
+    return window.vfs.onControlKey((key) => {
       if (key === "h") {
         panPreview(-1);
       }
@@ -1094,10 +1094,10 @@ export default function App() {
   }, [openEntry, panPreview, scrollPreview]);
 
   useEffect(() => {
-    if (!window.o2?.onPreviewKey) {
+    if (!window.vfs?.onPreviewKey) {
       return undefined;
     }
-    return window.o2.onPreviewKey((key) => {
+    return window.vfs.onPreviewKey((key) => {
       if (key === "zoom-out") {
         changePreviewZoom(-1);
       }
@@ -1108,7 +1108,7 @@ export default function App() {
   }, [changePreviewZoom]);
 
   useEffect(() => {
-    window.o2?.setInputMode?.(
+    window.vfs?.setInputMode?.(
       commandMode ||
         Boolean(prompt) ||
         filterMode ||
@@ -1248,13 +1248,13 @@ export default function App() {
 
       if (event.ctrlKey && !event.altKey && !event.metaKey && keyName(event) === "c") {
         event.preventDefault();
-        window.o2.quit();
+        window.vfs.quit();
         return;
       }
 
       if (isPlainKey(event, "q")) {
         event.preventDefault();
-        window.o2.quit();
+        window.vfs.quit();
         return;
       }
 

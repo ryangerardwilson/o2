@@ -7,8 +7,8 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const appRoot = path.resolve(__dirname, "..");
-const startDir = process.env.VFS_START_DIR || process.env.VFILES_START_DIR || process.env.O2_START_DIR || process.cwd();
-const focusPath = process.env.VFS_FOCUS_PATH || process.env.VFILES_FOCUS_PATH || process.env.O2_FOCUS_PATH || "";
+const startDir = process.env.VFS_START_DIR || process.cwd();
+const focusPath = process.env.VFS_FOCUS_PATH || "";
 const shellOutputLimit = 256 * 1024;
 const shellTimeoutMs = 120000;
 let viteServer = null;
@@ -96,7 +96,7 @@ function normalizedInputKey(input) {
 }
 
 async function resolveTerminalCommand({ workdir, title, command }) {
-  const preferred = process.env.VFS_TERMINAL || process.env.VFILES_TERMINAL || process.env.O2_TERMINAL || process.env.EVIM_TERMINAL || process.env.TERMINAL || "";
+  const preferred = process.env.VFS_TERMINAL || process.env.EVIM_TERMINAL || process.env.TERMINAL || "";
   const preferredParts = splitCommand(preferred);
   const preferredName = preferredParts[0] || "";
   const preferredBase = path.basename(preferredName);
@@ -205,7 +205,7 @@ async function openInEditor(filePath) {
   if (!stats.isFile()) {
     throw new Error("select a file");
   }
-  const editor = process.env.VFS_EDITOR || process.env.VFILES_EDITOR || process.env.O2_EDITOR || process.env.EVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
+  const editor = process.env.VFS_EDITOR || process.env.EVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
   const workdir = path.dirname(fullPath);
   const command = `${editor} ${shellQuote(fullPath)}`;
   const terminal = await resolveTerminalCommand({
@@ -672,7 +672,7 @@ async function startViteServer() {
     root: appRoot,
     server: {
       host: "127.0.0.1",
-      port: Number(process.env.VFS_VITE_PORT || process.env.O2_VITE_PORT || 5173),
+      port: Number(process.env.VFS_VITE_PORT || 5173),
       strictPort: false
     }
   });
@@ -687,7 +687,7 @@ async function loadApp(window) {
     home: os.homedir()
   }).toString();
 
-  if (process.env.VFS_DEV === "1" || process.env.VFILES_DEV === "1" || process.env.O2_DEV === "1") {
+  if (process.env.VFS_DEV === "1") {
     const url = await startViteServer();
     await window.loadURL(`${url}?${query}`);
     return;
@@ -717,7 +717,7 @@ function forwardGlobalKeys(window) {
       ["h", "j", "k", "l", "m"].includes(normalizedKey)
     ) {
       event.preventDefault();
-      window.webContents.send("o2:control-key", normalizedKey);
+      window.webContents.send("vfs:control-key", normalizedKey);
       return;
     }
     if (input.control && !input.alt && !input.meta && normalizedKey === "c") {
@@ -733,7 +733,7 @@ function forwardGlobalKeys(window) {
       (normalizedKey === "-" || normalizedKey === "=" || normalizedKey === "+")
     ) {
       event.preventDefault();
-      window.webContents.send("o2:preview-key", normalizedKey === "-" ? "zoom-out" : "zoom-in");
+      window.webContents.send("vfs:preview-key", normalizedKey === "-" ? "zoom-out" : "zoom-in");
     }
   });
 }
@@ -764,30 +764,30 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle("o2:list-directory", async (_event, args) => {
+  ipcMain.handle("vfs:list-directory", async (_event, args) => {
     const model = await fsModel();
     return model.listDirectory(args);
   });
-  ipcMain.handle("o2:preview-path", (_event, filePath) => previewPath(filePath));
-  ipcMain.handle("o2:open-editor", (_event, filePath) => openInEditor(filePath));
-  ipcMain.handle("o2:open-external", async (_event, filePath) => {
+  ipcMain.handle("vfs:preview-path", (_event, filePath) => previewPath(filePath));
+  ipcMain.handle("vfs:open-editor", (_event, filePath) => openInEditor(filePath));
+  ipcMain.handle("vfs:open-external", async (_event, filePath) => {
     const message = await shell.openPath(path.resolve(filePath));
     if (message) {
       throw new Error(message);
     }
     return { ok: true };
   });
-  ipcMain.handle("o2:create-file", (_event, args) => createFile(args));
-  ipcMain.handle("o2:create-directory", (_event, args) => createDirectory(args));
-  ipcMain.handle("o2:rename-path", (_event, args) => renamePath(args));
-  ipcMain.handle("o2:paste-paths", (_event, args) => pastePaths(args));
-  ipcMain.handle("o2:delete-paths", (_event, paths) => deletePaths(paths));
-  ipcMain.handle("o2:extract-zip", (_event, filePath) => extractZip(filePath));
-  ipcMain.handle("o2:run-shell-command", (_event, args) => runShellCommand(args));
-  ipcMain.on("o2:set-input-mode", (event, active) => {
+  ipcMain.handle("vfs:create-file", (_event, args) => createFile(args));
+  ipcMain.handle("vfs:create-directory", (_event, args) => createDirectory(args));
+  ipcMain.handle("vfs:rename-path", (_event, args) => renamePath(args));
+  ipcMain.handle("vfs:paste-paths", (_event, args) => pastePaths(args));
+  ipcMain.handle("vfs:delete-paths", (_event, paths) => deletePaths(paths));
+  ipcMain.handle("vfs:extract-zip", (_event, filePath) => extractZip(filePath));
+  ipcMain.handle("vfs:run-shell-command", (_event, args) => runShellCommand(args));
+  ipcMain.on("vfs:set-input-mode", (event, active) => {
     inputModeByWebContentsId.set(event.sender.id, Boolean(active));
   });
-  ipcMain.on("o2:quit", () => app.quit());
+  ipcMain.on("vfs:quit", () => app.quit());
 
   createWindow().catch((error) => {
     console.error(error);

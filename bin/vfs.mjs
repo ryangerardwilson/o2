@@ -40,7 +40,7 @@ async function packageVersion() {
 }
 
 function runInstallerUpgrade() {
-  const installScript = process.env.VFS_INSTALL_SCRIPT || process.env.VFILES_INSTALL_SCRIPT || process.env.O2_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
+  const installScript = process.env.VFS_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
   return new Promise((resolve, reject) => {
     const child = spawn(installScript, ["-u"], {
       cwd: appRoot,
@@ -73,8 +73,6 @@ function runElectron({ directory, focusPath }) {
           ...process.env,
           VFS_START_DIR: directory,
           VFS_FOCUS_PATH: focusPath || "",
-          O2_START_DIR: directory,
-          O2_FOCUS_PATH: focusPath || ""
         }
       }
     );

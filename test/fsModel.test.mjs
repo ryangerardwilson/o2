@@ -15,7 +15,7 @@ import {
 } from "../src/fsModel.mjs";
 
 test("normalizeStartPath returns file parent and focus path", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "o2-model-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vfs-model-"));
   const filePath = path.join(root, "note.md");
   await fs.writeFile(filePath, "# note\n", "utf8");
 
@@ -26,7 +26,7 @@ test("normalizeStartPath returns file parent and focus path", async () => {
 });
 
 test("listDirectory hides dotfiles by default and keeps directories first", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "o2-list-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vfs-list-"));
   await fs.mkdir(path.join(root, "zeta"));
   await fs.mkdir(path.join(root, "alpha"));
   await fs.writeFile(path.join(root, "beta.txt"), "beta", "utf8");
@@ -44,7 +44,7 @@ test("listDirectory hides dotfiles by default and keeps directories first", asyn
 });
 
 test("listDirectory shows gitignored entries by default", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "o2-gitignored-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vfs-gitignored-"));
   await fs.mkdir(path.join(root, "Downloads"));
   await fs.writeFile(path.join(root, ".gitignore"), "/Downloads/\n", "utf8");
 
@@ -60,7 +60,7 @@ test("listDirectory shows gitignored entries by default", async () => {
 });
 
 test("listDirectory can show hidden files and filter names", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "o2-filter-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "vfs-filter-"));
   await fs.writeFile(path.join(root, ".env"), "x", "utf8");
   await fs.writeFile(path.join(root, "alpha.js"), "x", "utf8");
   await fs.writeFile(path.join(root, "beta.py"), "x", "utf8");
